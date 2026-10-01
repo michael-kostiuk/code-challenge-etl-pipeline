@@ -31,6 +31,11 @@ join), why you picked what you picked.
   SQLite) chosen by benchmark: Redis 6,142 p/s (org load 12.1 s), LMDB 1,620
   (76.1 s), SQLite 1,350 (206.0 s) (single runs, earlier loaded VM). LMDB and SQLite also hit the 2 GiB cgroup
   ceiling (page cache of the mapped/db file counts) and failed the memory gate.
+- **Auto-generated `_id`** (append-only path). Interleaved A/B, 3 runs each, full
+  data: auto median 10,972 p/s (10,610-10,997) vs explicit 11,151 (10,920-11,676),
+  no measurable gain. Exactly-once is enforced by retrying only clean rejections;
+  ambiguous failures fail the run; the final count check catches duplicates. Lookup
+  by person goes through a `term` query on `forager_id`.
 - **`object`, not `nested`, for `roles` / `organizations`.** Required by the
   test `term` queries; cost: cross-role matches ("title X at org Y" can match
   different roles).
