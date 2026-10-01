@@ -30,7 +30,7 @@ class FakeBulkServer:
             return web.Response(status=503)
         lines = (await request.read()).splitlines()
         items, errors = [], False
-        for _action, doc in zip(lines[::2], lines[1::2]):
+        for doc in lines[1::2]:
             doc_id = str(orjson.loads(doc)["n"])
             attempt = self.attempts[doc_id] = self.attempts.get(doc_id, 0) + 1
             status = self._item_status(doc_id, attempt)

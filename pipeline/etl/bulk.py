@@ -35,7 +35,7 @@ class _Refused(NamedTuple):
 
 def _bulk_body(items: list[tuple[int, bytes]]) -> bytes:
     parts = []
-    for doc_id, doc in items:
+    for _, doc in items:
         parts.append(b'{"index":{}}\n')
         parts.append(doc)
         parts.append(b"\n")
