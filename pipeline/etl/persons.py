@@ -14,7 +14,7 @@ from etl.config import Config
 from etl.deadletter import DeadLetter
 from etl.metrics import Counters, log
 from etl.orgstore import OrgReader
-from etl.procs import split_files, wait_all
+from etl.procs import run_all, split_files
 from etl.reader import read_records
 from etl.transform import build_document, referenced_org_ids
 
@@ -22,11 +22,7 @@ Batch = tuple[tuple[int, dict], ...]
 
 
 def run_persons(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> None:
-    procs = [ctx.Process(target=run_worker, args=(cfg, group, blocks[i], i), name=f"person-worker-{i}")
-             for i, group in enumerate(split_files(files, cfg.workers))]
-    for p in procs:
-        p.start()
-    wait_all(procs)
+    run_all(ctx, run_worker, split_files(files, cfg.workers), blocks, cfg, name="person-worker")
 
 
 def run_worker(cfg: Config, files: list[Path], counters: Counters, worker_id: int) -> None:

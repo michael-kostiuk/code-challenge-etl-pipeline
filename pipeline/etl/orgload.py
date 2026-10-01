@@ -10,7 +10,7 @@ from etl.config import Config
 from etl.deadletter import DeadLetter
 from etl.metrics import Counters
 from etl.orgstore import OrgWriter
-from etl.procs import split_files, wait_all
+from etl.procs import run_all, split_files
 from etl.reader import read_records
 
 ORG_BATCH = 2000  # ~5 MB of org JSON per store write
@@ -22,11 +22,7 @@ def load_orgs(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> No
         store.clear()  # fails fast if the store is unreachable
     finally:
         store.close()
-    procs = [ctx.Process(target=_load_files, args=(cfg, group, blocks[i], i), name=f"org-loader-{i}", daemon=True)
-             for i, group in enumerate(split_files(files, cfg.loaders))]
-    for p in procs:
-        p.start()
-    wait_all(procs)
+    run_all(ctx, _load_files, split_files(files, cfg.loaders), blocks, cfg, name="org-loader")
 
 
 def _load_files(cfg: Config, files: list[Path], counters: Counters, loader_id: int) -> None:

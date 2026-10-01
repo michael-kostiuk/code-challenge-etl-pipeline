@@ -50,25 +50,26 @@ def _run(cfg: Config, started: float) -> bool:
     (cfg.out_dir / "metrics.json").unlink(missing_ok=True)  # a failed run must not leave stale metrics
 
     ctx = mp.get_context("spawn")  # fresh interpreters: no inherited event loops or connections
-    blocks = [Counters.shared(ctx) for _ in range(cfg.loaders + cfg.workers)]
+    org_blocks = [Counters.shared(ctx) for _ in range(cfg.loaders)]
+    person_blocks = [Counters.shared(ctx) for _ in range(cfg.workers)]
     es = Elasticsearch(cfg.es_url, request_timeout=300)
     timings: dict[str, float] = {}
-    reporter = ProgressReporter(blocks, cfg.progress_interval_s)
+    reporter = ProgressReporter(org_blocks + person_blocks, cfg.progress_interval_s)
     reporter.start()
     try:
         with _phase("org_load", timings):
-            load_orgs(cfg, org_files, ctx, blocks[: cfg.loaders])
+            load_orgs(cfg, org_files, ctx, org_blocks)
         with _phase("index_setup", timings):
             create_index(es, cfg)
         with _phase("persons", timings):
-            run_persons(cfg, person_files, ctx, blocks[cfg.loaders :])
+            run_persons(cfg, person_files, ctx, person_blocks)
         with _phase("finalize", timings):
             es_count = finalize_index(es, cfg)
     finally:
         reporter.stop()
 
     wall_clock_s = time.monotonic() - started
-    counts = totals(blocks)
+    counts = totals(org_blocks + person_blocks)
     expected = int(counts["persons_read"] - counts["failed_docs"])
     ok = es_count == expected and counts["failed_docs"] == 0
     peak, peak_source = peak_memory_bytes()
