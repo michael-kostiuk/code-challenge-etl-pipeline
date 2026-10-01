@@ -7,6 +7,9 @@ from typing import Iterator
 
 import orjson
 
+from etl.deadletter import DeadLetter
+from etl.metrics import Counters
+
 
 class MalformedRecord(ValueError):
     pass
@@ -35,5 +38,14 @@ def parse_envelope(line: bytes) -> tuple[int, dict]:
     return forager_id, data
 
 
-def malformed_fields(path: Path, lineno: int, line: bytes, err: Exception) -> dict:
-    return {"file": path.name, "line": lineno, "error": str(err), "raw": line[:1000].decode("utf-8", "replace")}
+def read_records(files: list[Path], kind: str, dead_letter: DeadLetter, counters: Counters) -> Iterator[tuple[int, dict]]:
+    """Yields (forager_id, serialized_data) for every well-formed line of `files`; malformed lines
+    are dead-lettered as `kind` and counted."""
+    for path in files:
+        for lineno, line in read_lines(path):
+            try:
+                yield parse_envelope(line)
+            except MalformedRecord as err:
+                dead_letter.write(kind, file=path.name, line=lineno, error=str(err),
+                                  raw=line[:1000].decode("utf-8", "replace"))
+                counters.add("malformed")

@@ -3,8 +3,8 @@ org lookups and bulk requests with the CPU-bound parse/transform work."""
 from __future__ import annotations
 
 import asyncio
+from itertools import batched
 from pathlib import Path
-from typing import Iterator
 
 import aiohttp
 import uvloop
@@ -15,10 +15,10 @@ from etl.deadletter import DeadLetter
 from etl.metrics import Counters, log
 from etl.orgstore import OrgReader
 from etl.procs import split_files, wait_all
-from etl.reader import MalformedRecord, malformed_fields, parse_envelope, read_lines
+from etl.reader import read_records
 from etl.transform import build_document, referenced_org_ids
 
-Batch = list[tuple[int, dict]]
+Batch = tuple[tuple[int, dict], ...]
 
 
 def run_persons(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> None:
@@ -47,7 +47,7 @@ async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: in
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             sender = BulkSender(session, cfg, dead_letter, counters)
             pending = None
-            for batch in _batches(files, cfg.lookup_batch, dead_letter, counters):
+            for batch in batched(read_records(files, "malformed_person", dead_letter, counters), cfg.lookup_batch):
                 ids: set[int] = set()
                 for _, person in batch:
                     ids |= referenced_org_ids(person)
@@ -63,23 +63,6 @@ async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: in
         lag_watch.cancel()
         await store.aclose()
         dead_letter.close()
-
-
-def _batches(files: list[Path], size: int, dead_letter: DeadLetter, counters: Counters) -> Iterator[Batch]:
-    batch: Batch = []
-    for path in files:
-        for lineno, line in read_lines(path):
-            try:
-                batch.append(parse_envelope(line))
-            except MalformedRecord as err:
-                dead_letter.write("malformed_person", **malformed_fields(path, lineno, line, err))
-                counters.add("malformed")
-                continue
-            if len(batch) >= size:
-                yield batch
-                batch = []
-    if batch:
-        yield batch
 
 
 async def _emit(batch: Batch, lookup: asyncio.Future, sender: BulkSender, counters: Counters) -> None:
