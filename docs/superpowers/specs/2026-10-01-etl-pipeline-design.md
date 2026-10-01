@@ -40,7 +40,7 @@ store; ES must absorb 6.1 GB of documents → ES indexing is the expected bottle
 pipeline container (2 GB, 4 CPU)
  Phase 1  org files → 4 parse procs → OrgStore.put_many
           redis: each proc writes in parallel · lmdb/sqlite: parent is the single writer
- Phase 2  4 worker procs, one asyncio loop each, whole person files per worker:
+ Phase 2  4 worker procs, one asyncio loop each (uvloop), whole person files per worker:
           read+parse batch → await get_many(ids) [prefetch next batch] → transform (orjson.Fragment)
           → acquire semaphore(N) → aiohttp POST /_bulk (raw NDJSON bytes) → item errors / retry
  Parent   index setup → phase 1 → phase 2 → finalize (restore settings, refresh) → verify → metrics.json
@@ -61,7 +61,7 @@ pipeline container (2 GB, 4 CPU)
 | Module | Responsibility |
 |---|---|
 | `config.py` | All tunables from env: backend, workers, bulk bytes, in-flight per worker, shards, mapping variant, person file subset |
-| `reader.py` | Stream one gz NDJSON file line by line (`isal` with stdlib fallback); malformed lines → dead letter + counter |
+| `reader.py` | Stream one gz NDJSON file line by line (stdlib `gzip`); malformed lines → dead letter + counter |
 | `orgstore/` | `OrgStore` interface: `put_many(pairs)`, `get_many(ids) -> {id: bytes}`; backends `redis`, `lmdb`, `sqlite`, `memory` (tests) |
 | `transform.py` | Pure: person line + org lookup → document bytes |
 | `indexer.py` | Index create/settings/mapping, async bulk send, retries, item-error handling, finalize |
@@ -164,7 +164,7 @@ dropped before final runs.
 | 6 | Workers | 4 / 5 / 6 (only if logs show I/O wait) |
 | 7 | Mapping variant | lean vs `technologies` + `keywords` indexed |
 | 8 | ES node | heap 3 / 4 / 5 GB; `indices.memory.index_buffer_size` 10% vs 30% |
-| 9 | Minor | `isal` vs stdlib gzip; bulk gzip on/off |
+| 9 | Minor | bulk gzip on/off |
 | 10 | IDs (measurement only) | explicit `_id` vs auto id; explicit ships |
 
 Compose changes: `redis` service (`--save "" --appendonly no`, healthcheck); ES heap via env with
@@ -211,3 +211,6 @@ fixture (count, both `.keyword` term counts, unresolved-person count, dead-lette
 - Official `bench/expected.json` requested from reviewers. If its Dell count is 570, it was derived from
   `roles[].organization_name`; our org-feed join yields 647 — to be raised with reviewers, not hacked
   around.
+- Library pass after all benchmarks: `python-isal` (faster gunzip), `msgspec` with `Raw` (org load
+  without parse/re-serialize), `hiredis` (only if Redis wins). Each is adopted only if it measurably
+  improves throughput. `uvloop` is used from the start.
