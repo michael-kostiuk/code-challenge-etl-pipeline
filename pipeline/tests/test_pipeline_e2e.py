@@ -63,8 +63,9 @@ def es():
     client.indices.delete(index=INDEX, ignore_unavailable=True)
 
 
-def test_pipeline_indexes_joined_persons_and_reruns_cleanly(es, tmp_path):
-    cfg = _fixture(tmp_path)
+@pytest.mark.parametrize("backend", ["redis", "lmdb", "sqlite"])
+def test_pipeline_indexes_joined_persons_and_reruns_cleanly(es, tmp_path, backend):
+    cfg = _fixture(tmp_path, ORG_STORE=backend)
 
     assert run(cfg) == 0
     assert run(cfg) == 0  # second run on a populated index and org store gives the same result

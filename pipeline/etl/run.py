@@ -47,6 +47,7 @@ def _run(cfg: Config, started: float) -> bool:
     if not org_files or not person_files:
         raise RuntimeError(f"no input files under {cfg.data_dir}/organization or {cfg.data_dir}/person")
     (cfg.out_dir / "dead_letter.ndjson").unlink(missing_ok=True)
+    (cfg.out_dir / "metrics.json").unlink(missing_ok=True)  # a failed run must not leave stale metrics
 
     ctx = mp.get_context("spawn")  # fresh interpreters: no inherited event loops or connections
     blocks = [Counters.shared(ctx) for _ in range(cfg.loaders + cfg.workers)]

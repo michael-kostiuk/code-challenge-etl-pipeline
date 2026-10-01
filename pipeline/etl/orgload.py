@@ -21,7 +21,7 @@ def load_orgs(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> No
     try:
         groups = split_files(files, cfg.loaders)
         if store.parallel_writes:
-            procs = [ctx.Process(target=_load_files, args=(cfg, group, None, blocks[i], i), name=f"org-loader-{i}")
+            procs = [ctx.Process(target=_load_files, args=(cfg, group, None, blocks[i], i), name=f"org-loader-{i}", daemon=True)
                      for i, group in enumerate(groups)]
             for p in procs:
                 p.start()
@@ -29,22 +29,29 @@ def load_orgs(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> No
             return
         # Single-writer backends: loaders parse, this process writes.
         batches = ctx.Queue(maxsize=cfg.loaders * 4)
-        procs = [ctx.Process(target=_load_files, args=(cfg, group, batches, blocks[i], i), name=f"org-loader-{i}")
+        procs = [ctx.Process(target=_load_files, args=(cfg, group, batches, blocks[i], i), name=f"org-loader-{i}", daemon=True)
                  for i, group in enumerate(groups)]
         for p in procs:
             p.start()
-        finished = 0
-        while finished < len(procs):
-            try:
-                batch = batches.get(timeout=1.0)
-            except queue_module.Empty:
-                raise_if_failed(procs)
-                continue
-            if batch is None:
-                finished += 1
-            else:
-                store.put_many(batch)
-        wait_all(procs)
+        try:
+            finished = 0
+            while finished < len(procs):
+                try:
+                    batch = batches.get(timeout=1.0)
+                except queue_module.Empty:
+                    raise_if_failed(procs)
+                    continue
+                if batch is None:
+                    finished += 1
+                else:
+                    store.put_many(batch)
+            wait_all(procs)
+        except BaseException:
+            for p in procs:
+                p.terminate()
+            for p in procs:
+                p.join()
+            raise
     finally:
         store.close()
 
