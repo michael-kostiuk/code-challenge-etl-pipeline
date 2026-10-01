@@ -3,8 +3,10 @@ org lookups and bulk requests with the CPU-bound parse/transform work."""
 from __future__ import annotations
 
 import asyncio
+from contextlib import aclosing
 from itertools import batched
 from pathlib import Path
+from typing import AsyncIterator, Iterable
 
 import aiohttp
 import uvloop
@@ -42,18 +44,10 @@ async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: in
         timeout = aiohttp.ClientTimeout(total=300)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session, asyncio.TaskGroup() as tasks:
             sender = BulkSender(session, tasks, cfg, dead_letter, counters)
-            pending = None
-            for batch in batched(read_records(files, "malformed_person", dead_letter, counters), cfg.lookup_batch):
-                ids: set[int] = set()
-                for _, person in batch:
-                    ids |= referenced_org_ids(person)
-                lookup = asyncio.ensure_future(store.get_many(ids))
-                await asyncio.sleep(0)  # let the lookup go out before parsing the next batch
-                if pending is not None:
-                    await _emit(*pending, sender, counters)
-                pending = (batch, lookup)
-            if pending is not None:
-                await _emit(*pending, sender, counters)
+            batches = batched(read_records(files, "malformed_person", dead_letter, counters), cfg.lookup_batch)
+            async with aclosing(_with_orgs(batches, store)) as joined:
+                async for batch, orgs in joined:
+                    await _emit(batch, orgs, sender, counters)
             await sender.flush()
     finally:
         lag_watch.cancel()
@@ -61,16 +55,33 @@ async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: in
         dead_letter.close()
 
 
-async def _emit(batch: Batch, lookup: asyncio.Future, sender: BulkSender, counters: Counters) -> None:
-    orgs = await lookup
+async def _with_orgs(batches: Iterable[Batch], store: OrgReader) -> AsyncIterator[tuple[Batch, dict[int, bytes]]]:
+    """Yields each batch with its looked-up orgs; the next batch is already parsed and its lookup in
+    flight while the caller transforms this one."""
+    pending: tuple[Batch, asyncio.Task] | None = None
+    try:
+        for batch in batches:
+            ids = set().union(*(referenced_org_ids(person) for _, person in batch))
+            ready, pending = pending, (batch, asyncio.create_task(store.get_many(ids)))
+            await asyncio.sleep(0)  # let the lookup go out before the caller's CPU-bound transform
+            if ready is not None:
+                yield ready[0], await ready[1]
+        if pending is not None:
+            yield pending[0], await pending[1]
+    finally:
+        if pending is not None:
+            pending[1].cancel()  # no-op unless the caller stopped early
+
+
+async def _emit(batch: Batch, orgs: dict[int, bytes], sender: BulkSender, counters: Counters) -> None:
     for person_id, person in batch:
-        doc, unresolved = build_document(person, orgs)
-        if unresolved:
-            counters.add("unresolved_refs", unresolved)
+        doc = build_document(person, orgs)
+        if doc.unresolved_refs:
+            counters.add("unresolved_refs", doc.unresolved_refs)
             counters.add("persons_with_unresolved")
-        if "affiliations" in person:
+        if doc.has_affiliations:
             counters.add("persons_with_affiliations")
-        await sender.add(person_id, doc)
+        await sender.add(person_id, doc.body)
     counters.add("persons_read", len(batch))
 
 

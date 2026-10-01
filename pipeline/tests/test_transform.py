@@ -16,9 +16,9 @@ def test_joins_full_org_record_once_and_moves_input_organizations_to_affiliation
         "organizations": [{"name": "KGI Club"}],
     }
 
-    doc, unresolved = build_document(person, {140717: DELL})
+    doc = build_document(person, {140717: DELL})
 
-    assert orjson.loads(doc) == {
+    assert orjson.loads(doc.body) == {
         "forager_id": 1,
         "first_name": "Ann",
         "roles": [
@@ -30,7 +30,7 @@ def test_joins_full_org_record_once_and_moves_input_organizations_to_affiliation
         ],
         "affiliations": [{"name": "KGI Club"}],
     }
-    assert unresolved == 0
+    assert (doc.unresolved_refs, doc.has_affiliations) == (0, True)
 
 
 def test_keeps_and_flags_roles_whose_organization_is_unknown_or_missing():
@@ -43,9 +43,9 @@ def test_keeps_and_flags_roles_whose_organization_is_unknown_or_missing():
         "organizations": [],
     }
 
-    doc, unresolved = build_document(person, {140717: DELL})
+    doc = build_document(person, {140717: DELL})
 
-    assert orjson.loads(doc) == {
+    assert orjson.loads(doc.body) == {
         "forager_id": 2,
         "roles": [
             {"role_title": "Analyst", "organization_id": 999, "organization_resolved": False},
@@ -54,4 +54,4 @@ def test_keeps_and_flags_roles_whose_organization_is_unknown_or_missing():
         "organizations": [],
         "unresolved_organization_ids": [999],
     }
-    assert unresolved == 1
+    assert (doc.unresolved_refs, doc.has_affiliations) == (1, False)

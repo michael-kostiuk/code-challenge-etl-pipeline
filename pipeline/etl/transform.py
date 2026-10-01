@@ -1,21 +1,30 @@
 """Turn one person record plus its looked-up orgs into the indexed document."""
 from __future__ import annotations
 
-from typing import Mapping
+from typing import Iterator, Mapping, NamedTuple
 
 import orjson
 
 
+class Document(NamedTuple):
+    body: bytes            # the JSON document
+    unresolved_refs: int   # roles whose organization_id is not in the org feed
+    has_affiliations: bool
+
+
+def _org_refs(person: dict) -> Iterator[tuple[dict, int]]:
+    """(role, organization_id) for every role that references an organization."""
+    for role in person.get("roles") or ():
+        if (org_id := role.get("organization_id")) is not None:
+            yield role, org_id
+
+
 def referenced_org_ids(person: dict) -> set[int]:
-    return {
-        role["organization_id"]
-        for role in person.get("roles") or ()
-        if role.get("organization_id") is not None
-    }
+    return {org_id for _, org_id in _org_refs(person)}
 
 
-def build_document(person: dict, orgs: Mapping[int, bytes]) -> tuple[bytes, int]:
-    """Mutates `person` into the document and returns (JSON bytes, unresolved reference count).
+def build_document(person: dict, orgs: Mapping[int, bytes]) -> Document:
+    """Builds the indexed document from `person` (which it mutates) and the orgs looked up for it.
 
     - `organizations` becomes the full org-feed records for the person's roles, deduplicated, in
       role order. Org bytes are spliced in verbatim (orjson.Fragment), never re-parsed.
@@ -28,10 +37,7 @@ def build_document(person: dict, orgs: Mapping[int, bytes]) -> tuple[bytes, int]
     unresolved: list[int] = []
     unresolved_refs = 0
 
-    for role in person.get("roles") or ():
-        org_id = role.get("organization_id")
-        if org_id is None:
-            continue
+    for role, org_id in _org_refs(person):
         raw = orgs.get(org_id)
         role["organization_resolved"] = raw is not None
         if raw is None:
@@ -48,4 +54,4 @@ def build_document(person: dict, orgs: Mapping[int, bytes]) -> tuple[bytes, int]
     person["organizations"] = joined
     if unresolved:
         person["unresolved_organization_ids"] = unresolved
-    return orjson.dumps(person), unresolved_refs
+    return Document(orjson.dumps(person), unresolved_refs, "affiliations" in person)
