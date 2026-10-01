@@ -18,7 +18,7 @@ services:
       timeout: 3s
       retries: 120
 
-  # Org lookup store for the join (ORG_STORE=redis). Ephemeral cache: persistence off.
+  # Org lookup store for the join. Ephemeral cache: persistence off.
   redis:
     image: redis:7.2-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
@@ -40,12 +40,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - DATA_DIR=/data
       - OUT_DIR=/out
-      - STAGE_DIR=/stage
     volumes:
       - ./data:/data:ro
       - ./pipeline:/app
       - ./out:/out
-      - stage:/stage
     # Hard ceiling — applies ONLY to the pipeline service. Do not raise.
     # The grader runs the pipeline against the same limits.
     # ES (and any other staging services you add) are unconstrained — give
@@ -56,4 +54,3 @@ services:
 
 volumes:
   es-data:
-  stage:

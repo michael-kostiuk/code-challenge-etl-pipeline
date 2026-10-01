@@ -1,16 +1,17 @@
 import asyncio
-import os
 
 import pytest
 import redis
 
 from etl.config import Config
-from etl.orgstore import create_store, open_store
+from etl.orgstore import OrgReader, OrgWriter
+
+REDIS_URL = Config.from_env().redis_url
 
 
 def _redis_reachable() -> bool:
     try:
-        client = redis.Redis.from_url(Config.from_env().redis_url, socket_connect_timeout=1)
+        client = redis.Redis.from_url(REDIS_URL, socket_connect_timeout=1)
         result = client.ping()
         client.close()
         return result
@@ -18,29 +19,18 @@ def _redis_reachable() -> bool:
         return False
 
 
-BACKENDS = [
-    "sqlite",
-    "lmdb",
-    pytest.param("redis", marks=pytest.mark.skipif(not _redis_reachable(), reason="redis not reachable")),
-]
-
-
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_returns_stored_org_bytes_and_omits_unknown_ids(backend, tmp_path):
-    cfg = Config.from_env({**os.environ, "ORG_STORE": backend, "STAGE_DIR": str(tmp_path)})
-    writer = create_store(cfg)
+@pytest.mark.skipif(not _redis_reachable(), reason="redis not reachable")
+def test_returns_stored_org_bytes_and_omits_cleared_and_unknown_ids():
+    writer = OrgWriter(REDIS_URL)
     writer.put_many([(1, b'{"a":1}')])
-    writer.close()
-
-    # Verify create_store() discards previous contents
-    writer = create_store(cfg)
+    writer.clear()
     writer.put_many([(2, b'{"b":2}')])
     writer.close()
 
     async def read():
-        reader = open_store(cfg)
+        reader = OrgReader(REDIS_URL)
         try:
-            return await reader.get_many([1, 2])
+            return await reader.get_many([1, 2, 3])
         finally:
             await reader.aclose()
 

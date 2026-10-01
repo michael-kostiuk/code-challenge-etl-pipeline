@@ -38,8 +38,7 @@ store; ES must absorb 6.1 GB of documents → ES indexing is the expected bottle
 
 ```
 pipeline container (2 GB, 4 CPU)
- Phase 1  org files → 4 parse procs → OrgStore.put_many
-          redis: each proc writes in parallel · lmdb/sqlite: parent is the single writer
+ Phase 1  org files → 4 parse procs → Redis, each proc writing in parallel
  Phase 2  4 worker procs, one asyncio loop each (uvloop), whole person files per worker:
           read+parse batch → await get_many(ids) [prefetch next batch] → transform (orjson.Fragment)
           → acquire semaphore(N) → aiohttp POST /_bulk (raw NDJSON bytes) → item errors / retry
@@ -60,16 +59,15 @@ pipeline container (2 GB, 4 CPU)
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | All tunables from env: backend, workers, bulk bytes, in-flight per worker, shards, mapping variant, person file subset |
+| `config.py` | All tunables from env: workers, bulk bytes, in-flight per worker, shards, person file subset |
 | `reader.py` | Stream one gz NDJSON file line by line (stdlib `gzip`); malformed lines → dead letter + counter |
-| `orgstore/` | `OrgStore` interface: `put_many(pairs)`, `get_many(ids) -> {id: bytes}`; backends `redis`, `lmdb`, `sqlite`, `memory` (tests) |
+| `orgstore.py` | Redis only: `OrgWriter.put_many(pairs)`, `OrgReader.get_many(ids) -> {id: bytes}`. The benchmarked LMDB / SQLite backends are kept, unwired, in `scripts/reference/alt_orgstores.py` |
 | `transform.py` | Pure: person line + org lookup → document bytes |
 | `indexer.py` | Index create/settings/mapping, async bulk send, retries, item-error handling, finalize |
 | `metrics.py` | JSON-lines logging, shared counters, progress, `metrics.json` |
 | `main.py` | Orchestration of phases, worker supervision, exit code |
 
-Workers open their own store/HTTP connections after the process start. LMDB/SQLite files live on a
-dedicated `stage` volume (not tmpfs — tmpfs counts against the 2 GB limit).
+Workers open their own store/HTTP connections after the process start.
 
 ## 4. Document and mapping
 
@@ -104,7 +102,7 @@ default).
 | `organizations.forager_id`, `organizations.linkedin_id` | `long` |
 | `organizations.name` | `text` + `.keyword` |
 | `organizations.domain`, `.industry`, `.country` | `keyword` |
-| `organizations.technologies`, `.keywords` | **variant**: `keyword` vs unmapped — chosen by benchmark (§6 #7) |
+| `organizations.technologies`, `.keywords` | unmapped (indexing them measured 8% slower, §6 #7) |
 | `unresolved_organization_ids` | `long` |
 | `affiliations` | `enabled: false` |
 | everything else | unmapped (in `_source` only) |
@@ -170,7 +168,7 @@ dropped before final runs.
 | 10 | IDs | explicit `_id` vs auto | auto ships (own commit); measured by interleaved A/B |
 
 Compose changes: `redis` service (`--save "" --appendonly no`, healthcheck); ES heap via env with
-default; tuning in `es-config/elasticsearch.yml`; volumes `out/` (bind) and `stage`. Pipeline limits
+default; tuning in `es-config/elasticsearch.yml`; `out/` bind-mounted. Pipeline limits
 unchanged. Shipped defaults = best measured config, ES heap kept modest (~4 GB) so the stack fits a
 16 GB grader machine; each tuned value commented.
 
@@ -187,8 +185,8 @@ literal expected values; no call-assertions, no constant pins.
 2. `transform` with a role at missing org 999 and a role with null `organization_id` → equals a
    handwritten dict: both roles kept, `organization_resolved: false` only on the 999 role,
    `unresolved_organization_ids: [999]`, `organizations: []`.
-3. `OrgStore` parametrized over all backends: `put_many({1: b'{"a":1}'})`, `get_many([1, 2])` →
-   `{1: b'{"a":1}'}`.
+3. Redis org store: `put_many([(1, b'{"a":1}')])`, `clear()`, `put_many([(2, b'{"b":2}')])`,
+   `get_many([1, 2, 3])` → `{2: b'{"b":2}'}`.
 4. Fake bulk server rejects doc 2 with item-level 429 once; send docs 1, 2, 3 → server's stored ids
    `{1, 2, 3}`.
 5. Fake bulk server returns 400 for doc 2 → dead-letter file has one line with `"forager_id": 2` and the

@@ -10,47 +10,46 @@ _TEXT_WITH_KEYWORD = {"type": "text", "fields": {"keyword": _KEYWORD}}
 _DATE = {"type": "date", "ignore_malformed": True}  # one bad date must not reject the person
 
 
-def build_mappings(index_org_arrays: bool) -> dict:
-    """`dynamic: false`: every field stays in _source, only the fields below are indexed.
-    `roles` / `organizations` are `object`, not `nested`: the correctness suite runs plain
-    `term` queries on their subfields, which do not match inside `nested`."""
-    org_properties = {
+# `dynamic: false`: every field stays in _source, only the fields below are indexed.
+# `roles` / `organizations` are `object`, not `nested`: the correctness suite runs plain
+# `term` queries on their subfields, which do not match inside `nested`.
+# Org `technologies` / `keywords` are left unindexed (indexing them measured 8% slower; EVALUATION.md).
+MAPPINGS = {
+    "dynamic": False,
+    "properties": {
         "forager_id": {"type": "long"},
         "linkedin_id": {"type": "long"},
-        "name": _TEXT_WITH_KEYWORD,
-        "domain": _KEYWORD,
-        "industry": _KEYWORD,
+        "first_name": {"type": "text"},
+        "last_name": {"type": "text"},
+        "headline": {"type": "text"},
         "country": _KEYWORD,
-    }
-    if index_org_arrays:
-        org_properties |= {"technologies": _KEYWORD, "keywords": _KEYWORD}
-    return {
-        "dynamic": False,
-        "properties": {
-            "forager_id": {"type": "long"},
-            "linkedin_id": {"type": "long"},
-            "first_name": {"type": "text"},
-            "last_name": {"type": "text"},
-            "headline": {"type": "text"},
-            "country": _KEYWORD,
-            "city": _KEYWORD,
-            "industry": _KEYWORD,
-            "skills": _KEYWORD,
-            "linkedin_slug": {**_KEYWORD, "doc_values": False},  # exact lookup only
-            "roles": {
-                "properties": {
-                    "role_title": _TEXT_WITH_KEYWORD,
-                    "organization_id": {"type": "long"},
-                    "organization_resolved": {"type": "boolean"},
-                    "start_date": _DATE,
-                    "end_date": _DATE,
-                }
-            },
-            "organizations": {"properties": org_properties},
-            "unresolved_organization_ids": {"type": "long"},
-            "affiliations": {"type": "object", "enabled": False},
+        "city": _KEYWORD,
+        "industry": _KEYWORD,
+        "skills": _KEYWORD,
+        "linkedin_slug": {**_KEYWORD, "doc_values": False},  # exact lookup only
+        "roles": {
+            "properties": {
+                "role_title": _TEXT_WITH_KEYWORD,
+                "organization_id": {"type": "long"},
+                "organization_resolved": {"type": "boolean"},
+                "start_date": _DATE,
+                "end_date": _DATE,
+            }
         },
-    }
+        "organizations": {
+            "properties": {
+                "forager_id": {"type": "long"},
+                "linkedin_id": {"type": "long"},
+                "name": _TEXT_WITH_KEYWORD,
+                "domain": _KEYWORD,
+                "industry": _KEYWORD,
+                "country": _KEYWORD,
+            }
+        },
+        "unresolved_organization_ids": {"type": "long"},
+        "affiliations": {"type": "object", "enabled": False},
+    },
+}
 
 
 def create_index(es: Elasticsearch, cfg: Config) -> None:
@@ -64,7 +63,7 @@ def create_index(es: Elasticsearch, cfg: Config) -> None:
             "refresh_interval": "-1",     # no searchable segments mid-load; refreshed once at the end
             "translog": {"durability": "async", "flush_threshold_size": "1gb"},
         },
-        mappings=build_mappings(cfg.index_org_arrays),
+        mappings=MAPPINGS,
     )
 
 

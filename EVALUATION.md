@@ -31,6 +31,7 @@ join), why you picked what you picked.
   SQLite) chosen by benchmark: Redis 6,142 p/s (org load 12.1 s), LMDB 1,620
   (76.1 s), SQLite 1,350 (206.0 s) (single runs, earlier loaded VM). LMDB and SQLite also hit the 2 GiB cgroup
   ceiling (page cache of the mapped/db file counts) and failed the memory gate.
+  Code is Redis-only; the losers are kept unwired in `scripts/reference/alt_orgstores.py`.
 - **Auto-generated `_id`** (append-only path). Interleaved A/B, 3 runs each, full
   data: auto median 10,972 p/s (10,610-10,997) vs explicit 11,151 (10,920-11,676),
   no measurable gain. Exactly-once is enforced by retrying only clean rejections;
@@ -40,10 +41,10 @@ join), why you picked what you picked.
   test `term` queries; cost: cross-role matches ("title X at org Y" can match
   different roles).
 - **`dynamic: false`.** Everything stays in `_source`; only searched fields are
-  indexed. Org `technologies` / `keywords` are not indexed by default
-  (`INDEX_ORG_ARRAYS=0`): indexing them cost 8.0% (full data, median of 3:
-  8,500 vs 9,238 p/s), under 10% but inside the 10-13% within-arm spread, so
-  not separable from noise; left opt-in.
+  indexed. Org `technologies` / `keywords` are not indexed: indexing them
+  cost 8.0% (full data, median of 3: 8,500 vs 9,238 p/s), under 10% but inside
+  the 10-13% within-arm spread, so not separable from noise; the opt-in flag
+  was removed.
 - **Input `organizations[]` → `affiliations`.** 17,302 persons already carry
   LinkedIn affiliations there; moved, not overwritten, so `organizations[]`
   means "joined employers" only.

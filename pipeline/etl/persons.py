@@ -13,7 +13,7 @@ from etl.bulk import BulkSender
 from etl.config import Config
 from etl.deadletter import DeadLetter
 from etl.metrics import Counters, log
-from etl.orgstore import open_store
+from etl.orgstore import OrgReader
 from etl.procs import split_files, wait_all
 from etl.reader import MalformedRecord, malformed_fields, parse_envelope, read_lines
 from etl.transform import build_document, referenced_org_ids
@@ -39,7 +39,7 @@ def run_worker(cfg: Config, files: list[Path], counters: Counters, worker_id: in
 
 async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: int) -> None:
     dead_letter = DeadLetter(cfg.out_dir / "dead_letter.ndjson")
-    store = open_store(cfg)
+    store = OrgReader(cfg.redis_url)
     lag_watch = asyncio.create_task(_watch_loop_lag(counters))
     try:
         connector = aiohttp.TCPConnector(limit=cfg.in_flight)

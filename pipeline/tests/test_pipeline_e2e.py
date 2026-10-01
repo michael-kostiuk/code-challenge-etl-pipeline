@@ -53,9 +53,8 @@ def _fixture(tmp_path: Path, **overrides) -> Config:
         orjson.dumps(_person(105, [])),
         orjson.dumps(_person(106, [("Director", 3), ("Intern", 998)])),
     ])
-    env = {**os.environ, "DATA_DIR": str(data), "OUT_DIR": str(tmp_path / "out"),
-           "STAGE_DIR": str(tmp_path / "stage"), "INDEX_NAME": INDEX, "WORKERS": "2",
-           "LOADERS": "1", "SHARDS": "1", "PROGRESS_INTERVAL_S": "60", **overrides}
+    env = {**os.environ, "DATA_DIR": str(data), "OUT_DIR": str(tmp_path / "out"), "INDEX_NAME": INDEX,
+           "WORKERS": "2", "LOADERS": "1", "SHARDS": "1", "PROGRESS_INTERVAL_S": "60", **overrides}
     return Config.from_env(env)
 
 
@@ -68,9 +67,8 @@ def es():
     client.indices.delete(index=INDEX, ignore_unavailable=True)
 
 
-@pytest.mark.parametrize("backend", ["redis", "lmdb", "sqlite"])
-def test_pipeline_indexes_joined_persons_and_reruns_cleanly(es, tmp_path, backend):
-    cfg = _fixture(tmp_path, ORG_STORE=backend)
+def test_pipeline_indexes_joined_persons_and_reruns_cleanly(es, tmp_path):
+    cfg = _fixture(tmp_path)
 
     assert run(cfg) == 0
     assert run(cfg) == 0  # second run on a populated index and org store gives the same result
@@ -96,7 +94,7 @@ def test_pipeline_indexes_joined_persons_and_reruns_cleanly(es, tmp_path, backen
 
 
 def test_run_exits_nonzero_when_org_store_unreachable(tmp_path):
-    cfg = _fixture(tmp_path, ORG_STORE="redis", REDIS_URL="redis://127.0.0.1:1/0")
+    cfg = _fixture(tmp_path, REDIS_URL="redis://127.0.0.1:1/0")
 
     started = time.monotonic()
     assert run(cfg) == 1
