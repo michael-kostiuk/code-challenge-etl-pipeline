@@ -27,12 +27,16 @@ config and skip committing it; the interviewer reads the real files.
 
 ## Agentic loops
 
-Describe the loop structures you ran — not "I prompted X" but the shape.
+claude init
+evaluation of main challenges before we see data
+profile data to see metrics
+
+<!-- Describe the loop structures you ran — not "I prompted X" but the shape.
 
 - Research → plan → implement → verify?
 - Multi-agent fan-out for parallel exploration?
 - Test-driven loop with auto-fix?
-- Structured-output validators?
+- Structured-output validators? -->
 
 ## Where the agent helped
 
