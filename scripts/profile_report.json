@@ -1,0 +1,796 @@
+{
+  "parser": "json",
+  "wall_seconds": 17.2,
+  "org_phase_seconds": 6.0,
+  "person_phase_seconds": 11.3,
+  "organizations": {
+    "files": 8,
+    "lines": 529041,
+    "blank_lines": 0,
+    "records": 529041,
+    "malformed_lines": 0,
+    "malformed_samples": [],
+    "distinct_ids": 529041,
+    "duplicate_ids": 0,
+    "duplicate_extra_records": 0,
+    "duplicate_ids_with_differing_date_updated": 0,
+    "duplicate_ids_with_differing_content_size": 0,
+    "duplicate_id_samples": [],
+    "envelope_id_ne_forager_id": 0,
+    "id_mismatch_samples": [],
+    "line_bytes": {
+      "n": 529041,
+      "total": 1394380787,
+      "avg": 2635.7,
+      "min": 255,
+      "p50": 2581,
+      "p95": 4815,
+      "p99": 6431,
+      "max": 24560
+    },
+    "serialized_data_compact_bytes": {
+      "n": 529041,
+      "total": 1354040110,
+      "avg": 2559.4,
+      "min": 178,
+      "p50": 2505,
+      "p95": 4739,
+      "p99": 6356,
+      "max": 24484
+    },
+    "name": {
+      "missing": 0,
+      "missing_pct": 0.0,
+      "blank_or_nonstring": 107,
+      "blank_or_nonstring_pct": 0.0202,
+      "max_chars": 118,
+      "over_256_chars": 0,
+      "over_256_samples": []
+    },
+    "fields": {
+      "addresses": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "list": 529041
+        },
+        "nonempty": 478727,
+        "nonempty_pct": 90.4896,
+        "avg_len_all": 2.117,
+        "avg_len_nonempty": 2.34,
+        "max_len": 166
+      },
+      "date_updated": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "str": 529041
+        },
+        "blank_str": 0
+      },
+      "forager_id": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "int": 529041
+        }
+      },
+      "funding_rounds": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "list": 529041
+        },
+        "nonempty": 23915,
+        "nonempty_pct": 4.5204,
+        "avg_len_all": 0.074,
+        "avg_len_nonempty": 1.627,
+        "max_len": 17
+      },
+      "keywords": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "list": 529041
+        },
+        "nonempty": 265996,
+        "nonempty_pct": 50.2789,
+        "avg_len_all": 4.454,
+        "avg_len_nonempty": 8.858,
+        "max_len": 193
+      },
+      "locations": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "list": 529041
+        },
+        "nonempty": 476945,
+        "nonempty_pct": 90.1527,
+        "avg_len_all": 3.911,
+        "avg_len_nonempty": 4.339,
+        "max_len": 12
+      },
+      "name": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "str": 529041
+        },
+        "blank_str": 107
+      },
+      "technologies": {
+        "present": 529041,
+        "present_pct": 100.0,
+        "types": {
+          "list": 529041
+        },
+        "nonempty": 366935,
+        "nonempty_pct": 69.3585,
+        "avg_len_all": 33.813,
+        "avg_len_nonempty": 48.751,
+        "max_len": 443
+      },
+      "linkedin_id": {
+        "present": 529033,
+        "present_pct": 99.9985,
+        "types": {
+          "int": 529033
+        }
+      },
+      "linkedin_slug": {
+        "present": 513306,
+        "present_pct": 97.0258,
+        "types": {
+          "str": 513306
+        },
+        "blank_str": 0
+      },
+      "linkedin_url": {
+        "present": 513306,
+        "present_pct": 97.0258,
+        "types": {
+          "str": 513306
+        },
+        "blank_str": 0
+      },
+      "employees_number": {
+        "present": 509016,
+        "present_pct": 96.2148,
+        "types": {
+          "int": 509016
+        }
+      },
+      "industry": {
+        "present": 491048,
+        "present_pct": 92.8185,
+        "types": {
+          "str": 491048
+        },
+        "blank_str": 0
+      },
+      "description": {
+        "present": 489396,
+        "present_pct": 92.5063,
+        "types": {
+          "str": 489396
+        },
+        "blank_str": 30
+      },
+      "location": {
+        "present": 477940,
+        "present_pct": 90.3408,
+        "types": {
+          "str": 477940
+        },
+        "blank_str": 0
+      },
+      "country": {
+        "present": 476927,
+        "present_pct": 90.1493,
+        "types": {
+          "str": 476927
+        },
+        "blank_str": 0
+      },
+      "employees_range": {
+        "present": 469475,
+        "present_pct": 88.7408,
+        "types": {
+          "str": 469475
+        },
+        "blank_str": 0
+      },
+      "website": {
+        "present": 452596,
+        "present_pct": 85.5503,
+        "types": {
+          "str": 452596
+        },
+        "blank_str": 0
+      },
+      "domain": {
+        "present": 452482,
+        "present_pct": 85.5287,
+        "types": {
+          "str": 452482
+        },
+        "blank_str": 0
+      },
+      "logo_url": {
+        "present": 427185,
+        "present_pct": 80.747,
+        "types": {
+          "str": 427185
+        },
+        "blank_str": 0
+      },
+      "area": {
+        "present": 411440,
+        "present_pct": 77.7709,
+        "types": {
+          "str": 411440
+        },
+        "blank_str": 0
+      },
+      "city": {
+        "present": 383513,
+        "present_pct": 72.4921,
+        "types": {
+          "str": 383513
+        },
+        "blank_str": 0
+      },
+      "founded_date": {
+        "present": 349341,
+        "present_pct": 66.0329,
+        "types": {
+          "str": 349341
+        },
+        "blank_str": 0
+      },
+      "domain_rank": {
+        "present": 245645,
+        "present_pct": 46.4321,
+        "types": {
+          "int": 245645
+        }
+      },
+      "domain_traffic": {
+        "present": 243686,
+        "present_pct": 46.0618,
+        "types": {
+          "int": 243686
+        }
+      },
+      "domain_tranco_rank": {
+        "present": 165974,
+        "present_pct": 31.3726,
+        "types": {
+          "int": 165974
+        }
+      }
+    }
+  },
+  "persons": {
+    "files": 8,
+    "lines": 1000000,
+    "blank_lines": 0,
+    "records": 1000000,
+    "malformed_lines": 0,
+    "malformed_samples": [],
+    "distinct_ids": 1000000,
+    "duplicate_ids": 0,
+    "duplicate_extra_records": 0,
+    "duplicate_ids_with_differing_date_updated": 0,
+    "duplicate_id_samples": [],
+    "envelope_id_ne_forager_id": 0,
+    "id_mismatch_samples": [],
+    "line_bytes": {
+      "n": 1000000,
+      "total": 2967381003,
+      "avg": 2967.4,
+      "min": 444,
+      "p50": 1534,
+      "p95": 10119,
+      "p99": 17593,
+      "max": 130906
+    },
+    "serialized_data_compact_bytes": {
+      "n": 1000000,
+      "total": 2889513706,
+      "avg": 2889.5,
+      "min": 366,
+      "p50": 1456,
+      "p95": 10041,
+      "p99": 17515,
+      "max": 130828
+    },
+    "organizations_nonempty_in_input": 17302,
+    "existing_organizations": {
+      "items": 34841,
+      "compact_bytes": 6349783,
+      "item_keys": {
+        "description": 9585,
+        "forager_id": 34841,
+        "linkedin_id": 34839,
+        "name": 34841,
+        "role_title": 24451
+      },
+      "forager_id_in_org_feed": 565,
+      "forager_id_also_in_persons_roles": 0
+    },
+    "fields": {
+      "certifications": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 81293,
+        "nonempty_pct": 8.1293,
+        "avg_len_all": 0.328,
+        "avg_len_nonempty": 4.033,
+        "max_len": 122
+      },
+      "courses": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 24849,
+        "nonempty_pct": 2.4849,
+        "avg_len_all": 0.129,
+        "avg_len_nonempty": 5.183,
+        "max_len": 40
+      },
+      "date_updated": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "str": 1000000
+        },
+        "blank_str": 0
+      },
+      "educations": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 434081,
+        "nonempty_pct": 43.4081,
+        "avg_len_all": 0.823,
+        "avg_len_nonempty": 1.896,
+        "max_len": 38
+      },
+      "first_name": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "str": 1000000
+        },
+        "blank_str": 0
+      },
+      "forager_id": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "int": 1000000
+        }
+      },
+      "honors": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 20842,
+        "nonempty_pct": 2.0842,
+        "avg_len_all": 0.061,
+        "avg_len_nonempty": 2.931,
+        "max_len": 43
+      },
+      "is_available": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "bool": 1000000
+        }
+      },
+      "languages": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 86378,
+        "nonempty_pct": 8.6378,
+        "avg_len_all": 0.204,
+        "avg_len_nonempty": 2.366,
+        "max_len": 18
+      },
+      "linkedin_id": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "int": 1000000
+        }
+      },
+      "locations": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 997613,
+        "nonempty_pct": 99.7613,
+        "avg_len_all": 3.88,
+        "avg_len_nonempty": 3.889,
+        "max_len": 12
+      },
+      "organizations": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 17302,
+        "nonempty_pct": 1.7302,
+        "avg_len_all": 0.035,
+        "avg_len_nonempty": 2.014,
+        "max_len": 24
+      },
+      "patents": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 1184,
+        "nonempty_pct": 0.1184,
+        "avg_len_all": 0.003,
+        "avg_len_nonempty": 2.466,
+        "max_len": 38
+      },
+      "projects": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 20867,
+        "nonempty_pct": 2.0867,
+        "avg_len_all": 0.062,
+        "avg_len_nonempty": 2.986,
+        "max_len": 88
+      },
+      "publications": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 11694,
+        "nonempty_pct": 1.1694,
+        "avg_len_all": 0.041,
+        "avg_len_nonempty": 3.471,
+        "max_len": 45
+      },
+      "roles": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 685694,
+        "nonempty_pct": 68.5694,
+        "avg_len_all": 2.083,
+        "avg_len_nonempty": 3.038,
+        "max_len": 95
+      },
+      "skills": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 352040,
+        "nonempty_pct": 35.204,
+        "avg_len_all": 5.344,
+        "avg_len_nonempty": 15.181,
+        "max_len": 279
+      },
+      "test_scores": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 2959,
+        "nonempty_pct": 0.2959,
+        "avg_len_all": 0.005,
+        "avg_len_nonempty": 1.84,
+        "max_len": 20
+      },
+      "volunteer_causes": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 32154,
+        "nonempty_pct": 3.2154,
+        "avg_len_all": 0.062,
+        "avg_len_nonempty": 1.931,
+        "max_len": 26
+      },
+      "volunteering": {
+        "present": 1000000,
+        "present_pct": 100.0,
+        "types": {
+          "list": 1000000
+        },
+        "nonempty": 40250,
+        "nonempty_pct": 4.025,
+        "avg_len_all": 0.085,
+        "avg_len_nonempty": 2.102,
+        "max_len": 26
+      },
+      "last_name": {
+        "present": 999179,
+        "present_pct": 99.9179,
+        "types": {
+          "str": 999179
+        },
+        "blank_str": 0
+      },
+      "linkedin_slug": {
+        "present": 998337,
+        "present_pct": 99.8337,
+        "types": {
+          "str": 998337
+        },
+        "blank_str": 0
+      },
+      "linkedin_url": {
+        "present": 998337,
+        "present_pct": 99.8337,
+        "types": {
+          "str": 998337
+        },
+        "blank_str": 0
+      },
+      "linkedin_area": {
+        "present": 997654,
+        "present_pct": 99.7654,
+        "types": {
+          "str": 997654
+        },
+        "blank_str": 0
+      },
+      "location": {
+        "present": 997654,
+        "present_pct": 99.7654,
+        "types": {
+          "str": 997654
+        },
+        "blank_str": 0
+      },
+      "country": {
+        "present": 997482,
+        "present_pct": 99.7482,
+        "types": {
+          "str": 997482
+        },
+        "blank_str": 0
+      },
+      "headline": {
+        "present": 997038,
+        "present_pct": 99.7038,
+        "types": {
+          "str": 997038
+        },
+        "blank_str": 0
+      },
+      "number_of_followers": {
+        "present": 943239,
+        "present_pct": 94.3239,
+        "types": {
+          "int": 943239
+        }
+      },
+      "number_of_connections": {
+        "present": 943237,
+        "present_pct": 94.3237,
+        "types": {
+          "int": 943237
+        }
+      },
+      "linkedin_country": {
+        "present": 752165,
+        "present_pct": 75.2165,
+        "types": {
+          "str": 752165
+        },
+        "blank_str": 0
+      },
+      "area": {
+        "present": 691437,
+        "present_pct": 69.1437,
+        "types": {
+          "str": 691437
+        },
+        "blank_str": 0
+      },
+      "industry": {
+        "present": 657617,
+        "present_pct": 65.7617,
+        "types": {
+          "str": 657617
+        },
+        "blank_str": 0
+      },
+      "city": {
+        "present": 616177,
+        "present_pct": 61.6177,
+        "types": {
+          "str": 616177
+        },
+        "blank_str": 0
+      },
+      "photo": {
+        "present": 294492,
+        "present_pct": 29.4492,
+        "types": {
+          "str": 294492
+        },
+        "blank_str": 0
+      },
+      "description": {
+        "present": 195901,
+        "present_pct": 19.5901,
+        "types": {
+          "str": 195901
+        },
+        "blank_str": 4
+      }
+    },
+    "roles": {
+      "total": 2083023,
+      "per_person": {
+        "n": 1000000,
+        "avg": 2.083,
+        "min": 0,
+        "p50": 1,
+        "p95": 9,
+        "p99": 13,
+        "max": 95
+      },
+      "persons_with_zero_roles": 314306,
+      "without_organization_id": 697686,
+      "without_organization_id_pct": 33.4939,
+      "organization_id_types": {
+        "int": 1385337,
+        "NoneType": 697686
+      },
+      "role_title_types": {
+        "str": 2082214,
+        "NoneType": 809
+      },
+      "role_title_max_chars": 100,
+      "role_title_over_256_chars": 0
+    },
+    "distinct_orgs_per_person": {
+      "n": 1000000,
+      "avg": 1.092,
+      "min": 0,
+      "p50": 0,
+      "p95": 5,
+      "p99": 8,
+      "max": 40
+    },
+    "join": {
+      "references_total": 1385337,
+      "references_resolved": 1381699,
+      "references_resolved_pct": 99.7374,
+      "references_unresolved": 3638,
+      "references_unresolved_pct": 0.2626,
+      "distinct_org_ids_referenced": 528955,
+      "distinct_org_ids_resolved": 525870,
+      "distinct_org_ids_unresolved": 3085,
+      "distinct_org_ids_unresolved_pct": 0.5832,
+      "persons_with_any_reference": 466724,
+      "persons_with_unresolved_reference": 1858,
+      "persons_with_unresolved_reference_pct": 0.1858,
+      "persons_with_only_unresolved_references": 858,
+      "org_feed_ids_never_referenced": 3171,
+      "referenced_org_compact_bytes": 1346451205,
+      "all_org_compact_bytes": 1354040110,
+      "referenced_org_bytes_pct": 99.4395,
+      "referenced_org_count_pct": 99.4006
+    },
+    "org_name_vs_role_name": {
+      "roles_compared": 1381699,
+      "mismatched": 60128,
+      "mismatched_pct": 4.3517,
+      "mismatched_case_or_whitespace_only": 1344,
+      "mismatched_because_role_name_null": 40626,
+      "mismatched_different_string": 19502,
+      "samples": [
+        {
+          "org_id": 9,
+          "role_name": null,
+          "feed_name": "IBM"
+        },
+        {
+          "org_id": 3460025,
+          "role_name": null,
+          "feed_name": "Bozankaya A.Ş."
+        },
+        {
+          "org_id": 766767,
+          "role_name": null,
+          "feed_name": "KOMPAS GRAMEDIA"
+        },
+        {
+          "org_id": 149112,
+          "role_name": "Freelance Self employed",
+          "feed_name": "Freelance"
+        },
+        {
+          "org_id": 11727,
+          "role_name": "GREAT EASTERN",
+          "feed_name": "Great Eastern"
+        },
+        {
+          "org_id": 115,
+          "role_name": null,
+          "feed_name": "BT Group"
+        },
+        {
+          "org_id": 6771387,
+          "role_name": "Provalue Property Services",
+          "feed_name": "PPSI"
+        },
+        {
+          "org_id": 405,
+          "role_name": null,
+          "feed_name": "Roche"
+        },
+        {
+          "org_id": 142,
+          "role_name": null,
+          "feed_name": "Vodafone"
+        },
+        {
+          "org_id": 770,
+          "role_name": null,
+          "feed_name": "Best Buy"
+        }
+      ]
+    },
+    "merged_document_bytes": {
+      "n": 1000000,
+      "total": 6567066313,
+      "avg": 6567.1,
+      "min": 366,
+      "p50": 1920,
+      "p95": 27659,
+      "p99": 45780,
+      "max": 182135
+    },
+    "merged_total_vs_input_sd_total_ratio": 2.273,
+    "candidate_expected": {
+      "role_title_exact": "Project Manager",
+      "persons_with_role_title": 7081,
+      "org_name_exact": "Dell Technologies",
+      "persons_at_org_by_feed_name": 647,
+      "persons_at_org_by_role_organization_name": 570,
+      "persons_feed_match_but_not_role_name": 77,
+      "persons_role_name_match_but_not_feed": 0,
+      "note": "Counts are distinct person ids (matches ES doc count when _id = person id)."
+    }
+  }
+}
