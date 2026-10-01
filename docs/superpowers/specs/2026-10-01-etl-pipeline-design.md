@@ -13,8 +13,8 @@ Hard constraints: `pipeline` service `mem_limit: 2g`, `cpus: 4.0` (never raised)
 `docker compose up` on a fresh machine; no preprocessing outside the pipeline; `bench/correctness.py`
 and `bench/expected.json` are not modified. ES and staging services are unconstrained.
 
-Decisions taken: Python; org store chosen by benchmark among Redis / LMDB / SQLite; existing
-`serialized_data.organizations` moved to `affiliations`; org heavy arrays indexed or not by benchmark;
+Decisions taken: Python; org store chosen by benchmark among Redis / LMDB / SQLite (decided: Redis; the alternatives are kept unwired in
+`scripts/reference/`); existing `serialized_data.organizations` moved to `affiliations`; org heavy arrays not indexed (measured);
 the take-home's time budget is not a design constraint.
 
 ## 2. Data facts (from `scripts/profile_report.json`)
@@ -59,13 +59,14 @@ pipeline container (2 GB, 4 CPU)
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | All tunables from env: workers, bulk bytes, in-flight per worker, shards, person file subset |
+| `config.py` | All tunables from env: workers, loaders, bulk bytes, in-flight per worker, shards, person file subset |
 | `reader.py` | Stream one gz NDJSON file line by line (stdlib `gzip`); malformed lines → dead letter + counter |
 | `orgstore.py` | Redis only: `OrgWriter.put_many(pairs)`, `OrgReader.get_many(ids) -> {id: bytes}`. The benchmarked LMDB / SQLite backends are kept, unwired, in `scripts/reference/alt_orgstores.py` |
 | `transform.py` | Pure: person line + org lookup → document bytes |
-| `indexer.py` | Index create/settings/mapping, async bulk send, retries, item-error handling, finalize |
+| `index_admin.py` | Index create/settings/mapping, finalize |
+| `bulk.py` | Async bulk send, retries, item-error handling |
 | `metrics.py` | JSON-lines logging, shared counters, progress, `metrics.json` |
-| `main.py` | Orchestration of phases, worker supervision, exit code |
+| `run.py` (entry `main.py`) | Orchestration of phases, worker supervision, exit code |
 
 Workers open their own store/HTTP connections after the process start.
 
@@ -157,7 +158,7 @@ dropped before final runs.
 | # | Knob | Values |
 |---|---|---|
 | 1 | Baseline | Redis, 4 workers, ~10 MB bulk, 2 in-flight/worker, 4 shards |
-| 2 | Org store | redis / lmdb / sqlite (each with its best load strategy) |
+| 2 | Org store | redis / lmdb / sqlite (each with its best load strategy); decided: Redis |
 | 3 | Bulk size (bytes-capped) | 5 / 10 / 20 MB |
 | 4 | Shards | 2 / 4 / 6 / 8 |
 | 5 | In-flight per worker | 1 / 2 / 3 / 4 (stop at 429s) |
