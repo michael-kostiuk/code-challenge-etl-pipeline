@@ -10,8 +10,11 @@ from etl.orgstore import create_store, open_store
 
 def _redis_reachable() -> bool:
     try:
-        return redis.Redis.from_url(Config.from_env().redis_url, socket_connect_timeout=1).ping()
-    except redis.exceptions.ConnectionError:
+        client = redis.Redis.from_url(Config.from_env().redis_url, socket_connect_timeout=1)
+        result = client.ping()
+        client.close()
+        return result
+    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError):
         return False
 
 
@@ -29,6 +32,11 @@ def test_returns_stored_org_bytes_and_omits_unknown_ids(backend, tmp_path):
     writer.put_many([(1, b'{"a":1}')])
     writer.close()
 
+    # Verify create_store() discards previous contents
+    writer = create_store(cfg)
+    writer.put_many([(2, b'{"b":2}')])
+    writer.close()
+
     async def read():
         reader = open_store(cfg)
         try:
@@ -36,4 +44,4 @@ def test_returns_stored_org_bytes_and_omits_unknown_ids(backend, tmp_path):
         finally:
             await reader.aclose()
 
-    assert asyncio.run(read()) == {1: b'{"a":1}'}
+    assert asyncio.run(read()) == {2: b'{"b":2}'}

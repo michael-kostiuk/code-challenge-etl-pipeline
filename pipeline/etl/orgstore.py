@@ -144,8 +144,14 @@ class SqliteOrgStore:
         ids = list(ids)
         if not ids:
             return {}
-        placeholders = ",".join("?" * len(ids))
-        return dict(self._db.execute(f"SELECT id, data FROM orgs WHERE id IN ({placeholders})", ids))
+        # Chunk into batches of at most 900 ids to avoid exceeding SQLite's variable limit
+        result = {}
+        batch_size = 900
+        for i in range(0, len(ids), batch_size):
+            batch = ids[i : i + batch_size]
+            placeholders = ",".join("?" * len(batch))
+            result.update(dict(self._db.execute(f"SELECT id, data FROM orgs WHERE id IN ({placeholders})", batch)))
+        return result
 
     def close(self) -> None:
         self._db.close()
