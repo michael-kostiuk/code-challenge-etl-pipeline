@@ -1,0 +1,104 @@
+"""Phase 2: one process per group of person files; each runs a uvloop event loop that overlaps
+org lookups and bulk requests with the CPU-bound parse/transform work."""
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import Iterator
+
+import aiohttp
+import uvloop
+
+from etl.bulk import BulkSender
+from etl.config import Config
+from etl.deadletter import DeadLetter
+from etl.metrics import Counters, log
+from etl.orgstore import open_store
+from etl.procs import split_files, wait_all
+from etl.reader import MalformedRecord, malformed_fields, parse_envelope, read_lines
+from etl.transform import build_document, referenced_org_ids
+
+Batch = list[tuple[int, dict]]
+
+
+def run_persons(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> None:
+    procs = [ctx.Process(target=run_worker, args=(cfg, group, blocks[i], i), name=f"person-worker-{i}")
+             for i, group in enumerate(split_files(files, cfg.workers))]
+    for p in procs:
+        p.start()
+    wait_all(procs)
+
+
+def run_worker(cfg: Config, files: list[Path], counters: Counters, worker_id: int) -> None:
+    try:
+        uvloop.run(_run(cfg, files, counters, worker_id))
+    except Exception as err:
+        log("worker_failed", level="error", worker=worker_id, error=repr(err))
+        raise SystemExit(1)
+
+
+async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: int) -> None:
+    dead_letter = DeadLetter(cfg.out_dir / "dead_letter.ndjson")
+    store = open_store(cfg)
+    lag_watch = asyncio.create_task(_watch_loop_lag(counters))
+    try:
+        connector = aiohttp.TCPConnector(limit=cfg.in_flight)
+        timeout = aiohttp.ClientTimeout(total=300)
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+            sender = BulkSender(session, cfg, dead_letter, counters)
+            pending = None
+            for batch in _batches(files, cfg.lookup_batch, dead_letter, counters):
+                ids: set[int] = set()
+                for _, person in batch:
+                    ids |= referenced_org_ids(person)
+                lookup = asyncio.ensure_future(store.get_many(ids))
+                await asyncio.sleep(0)  # let the lookup go out before parsing the next batch
+                if pending is not None:
+                    await _emit(*pending, sender, counters)
+                pending = (batch, lookup)
+            if pending is not None:
+                await _emit(*pending, sender, counters)
+            await sender.flush()
+    finally:
+        lag_watch.cancel()
+        await store.aclose()
+        dead_letter.close()
+
+
+def _batches(files: list[Path], size: int, dead_letter: DeadLetter, counters: Counters) -> Iterator[Batch]:
+    batch: Batch = []
+    for path in files:
+        for lineno, line in read_lines(path):
+            try:
+                batch.append(parse_envelope(line))
+            except MalformedRecord as err:
+                dead_letter.write("malformed_person", **malformed_fields(path, lineno, line, err))
+                counters.add("malformed")
+                continue
+            if len(batch) >= size:
+                yield batch
+                batch = []
+    if batch:
+        yield batch
+
+
+async def _emit(batch: Batch, lookup: asyncio.Future, sender: BulkSender, counters: Counters) -> None:
+    orgs = await lookup
+    for person_id, person in batch:
+        doc, unresolved = build_document(person, orgs)
+        if unresolved:
+            counters.add("unresolved_refs", unresolved)
+            counters.add("persons_with_unresolved")
+        if "affiliations" in person:
+            counters.add("persons_with_affiliations")
+        await sender.add(person_id, doc)
+    counters.add("persons_read", len(batch))
+
+
+async def _watch_loop_lag(counters: Counters, interval_s: float = 0.05) -> None:
+    """Accumulates how long CPU work kept the event loop from servicing I/O."""
+    loop = asyncio.get_running_loop()
+    while True:
+        started = loop.time()
+        await asyncio.sleep(interval_s)
+        counters.add("loop_blocked_s", max(0.0, loop.time() - started - interval_s))
