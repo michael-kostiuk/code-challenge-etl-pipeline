@@ -73,7 +73,7 @@ dedicated `stage` volume (not tmpfs — tmpfs counts against the 2 GB limit).
 
 ## 4. Document and mapping
 
-Document `_id` = `forager_id`:
+Document `_id`: auto-generated (append-only fast path); `forager_id` is indexed as `long` for lookups.
 
 ```jsonc
 {
@@ -125,9 +125,11 @@ flagged and counted. Null `organization_id` → passed through, counted.
 **Org store:** unreachable at startup → fail fast. Mid-run failure → bounded retries with backoff, then
 abort (never index persons with silently missing orgs).
 
-**ES bulk:** request-level failure (connection, 5xx, 429) → retry whole request, exponential backoff
-with jitter, max N attempts. Item-level: 429 items → retry those items only; other 4xx → dead letter,
-no retry. Retries are idempotent because `_id` = `forager_id`.
+**ES bulk:** with auto IDs a retry is only safe if nothing was written. Whole-request HTTP 429/503 or
+connection never established → retry the request (exponential backoff with jitter, max N attempts).
+Item-level 429/5xx → retry those items only; other 4xx → dead letter, no retry. Anything ambiguous
+(timeout, other `aiohttp.ClientError`, other 5xx) → `BulkFailed` at once, no retry; the operator
+re-runs from scratch, and the `es_count == persons_read - failed_docs` check catches duplicates.
 
 **Run:** `persons` index existing at start → deleted and recreated (logged). Worker non-zero exit →
 abort, exit 1. Final verify: ES `_count` == successfully parsed persons − documents permanently rejected by ES
@@ -165,7 +167,7 @@ dropped before final runs.
 | 7 | Mapping variant | lean vs `technologies` + `keywords` indexed |
 | 8 | ES node | heap 3 / 4 / 5 GB; `indices.memory.index_buffer_size` 10% vs 30% |
 | 9 | Minor | bulk gzip on/off |
-| 10 | IDs (measurement only) | explicit `_id` vs auto id; explicit ships |
+| 10 | IDs | explicit `_id` vs auto | auto ships (own commit); measured by interleaved A/B |
 
 Compose changes: `redis` service (`--save "" --appendonly no`, healthcheck); ES heap via env with
 default; tuning in `es-config/elasticsearch.yml`; volumes `out/` (bind) and `stage`. Pipeline limits
@@ -177,7 +179,7 @@ unchanged. Shipped defaults = best measured config, ES heap kept modest (~4 GB) 
 Follows `.claude/skills/principle-test-behavior-not-implementation`: call the code as users do, assert
 literal expected values; no call-assertions, no constant pins.
 
-**Unit tests (5):**
+**Unit tests (6):**
 
 1. `transform` with two roles at org 140717, lookup `{140717: b'{"forager_id":140717,"name":"Dell Technologies","technologies":["ASP.NET"]}'}`
    and input `organizations:[{"name":"KGI Club"}]` → output equals a handwritten dict: one org entry,
@@ -189,8 +191,10 @@ literal expected values; no call-assertions, no constant pins.
    `{1: b'{"a":1}'}`.
 4. Fake bulk server rejects doc 2 with item-level 429 once; send docs 1, 2, 3 → server's stored ids
    `{1, 2, 3}`.
-5. Fake bulk server returns 400 for doc 2 → dead-letter file has one line with `"_id": "2"` and the
+5. Fake bulk server returns 400 for doc 2 → dead-letter file has one line with `"forager_id": 2` and the
    400 reason; failure count `1`; server stored `{1, 3}`.
+6. Fake bulk server stores the documents but answers after the client timeout → `BulkFailed`; document 1
+   was received exactly once (not resent).
 
 **End-to-end:** fixture (`pipeline/tests/fixtures/`, ~20 persons, ~10 orgs, one malformed line)
 through the real pipeline against compose ES + Redis; literal expectations hand-derived from the

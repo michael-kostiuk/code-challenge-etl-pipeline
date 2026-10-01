@@ -26,6 +26,11 @@ def _person(person_id, roles, organizations=()):
                                 "organizations": list(organizations)}}
 
 
+def _source(es, forager_id):
+    [hit] = es.search(index=INDEX, query={"term": {"forager_id": forager_id}})["hits"]["hits"]
+    return hit["_source"]
+
+
 def _write_gz(path: Path, lines: list[bytes]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(path, "wb") as fh:
@@ -77,9 +82,9 @@ def test_pipeline_indexes_joined_persons_and_reruns_cleanly(es, tmp_path, backen
     assert count({"term": {"roles.role_title.keyword": "Project Manager"}}) == 3
     assert count({"term": {"organizations.name.keyword": "Dell Technologies"}}) == 2
     assert count({"exists": {"field": "unresolved_organization_ids"}}) == 2
-    p101 = es.get(index=INDEX, id="101")["_source"]
+    p101 = _source(es, 101)
     assert [(o["name"], o["linkedin_id"]) for o in p101["organizations"]] == [("Dell Technologies", 10), ("Acme", 20)]
-    p103 = es.get(index=INDEX, id="103")["_source"]
+    p103 = _source(es, 103)
     assert p103["affiliations"] == [{"name": "Chess Club"}]
     assert p103["unresolved_organization_ids"] == [999]
     assert p103["roles"][0]["organization_resolved"] is False

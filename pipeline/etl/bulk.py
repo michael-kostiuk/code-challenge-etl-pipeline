@@ -2,6 +2,10 @@
 
 Request bodies are built from already-serialized documents; the elasticsearch client's bulk
 helpers are avoided because they re-serialize every document.
+
+Documents get auto-generated IDs (Elasticsearch's append-only fast path), so a retry is only safe when
+nothing was written: clean rejections (429/503, per-item 429/5xx, connection never established) are
+retried; any ambiguous failure (timeout, dropped connection, other 5xx) raises `BulkFailed` instead.
 """
 from __future__ import annotations
 
@@ -30,7 +34,7 @@ class _Retryable(Exception):
 def _bulk_body(items: list[tuple[int, bytes]]) -> bytes:
     parts = []
     for doc_id, doc in items:
-        parts.append(b'{"index":{"_id":"%d"}}\n' % doc_id)
+        parts.append(b'{"index":{}}\n')
         parts.append(doc)
         parts.append(b"\n")
     return b"".join(parts)
@@ -93,14 +97,20 @@ class BulkSender:
             try:
                 async with self._session.post(self._url, data=body, headers=_HEADERS) as resp:
                     payload = await resp.read()
-                    if resp.status == 429 or resp.status >= 500:
+                    if resp.status in (429, 503):
                         raise _Retryable(f"HTTP {resp.status}")
+                    if resp.status >= 500:
+                        raise BulkFailed(f"bulk request failed ambiguously: HTTP {resp.status}; not retried with auto IDs")
                     if resp.status >= 400:
                         raise BulkFailed(f"bulk request rejected: HTTP {resp.status}: {payload[:500]!r}")
-            except (aiohttp.ClientError, asyncio.TimeoutError, _Retryable) as err:
+            except (aiohttp.ClientConnectorError, _Retryable) as err:
                 self._counters.add("retries")
                 log("bulk_retry", level="warning", attempt=attempt + 1, docs=len(pending), error=str(err))
                 continue
+            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+                raise BulkFailed(
+                    f"bulk request outcome unknown ({err!r}); not retried because auto-generated IDs could duplicate documents"
+                ) from err
             self._counters.add("bytes_sent", len(body))
             pending = self._handle_items(pending, orjson.loads(payload))
             if not pending:
@@ -123,5 +133,5 @@ class BulkSender:
                 retry.append((doc_id, doc))
             else:
                 self._counters.add("failed_docs")
-                self._dead_letter.write("es_rejected", _id=str(doc_id), status=status, error=result.get("error"))
+                self._dead_letter.write("es_rejected", forager_id=doc_id, status=status, error=result.get("error"))
         return retry
