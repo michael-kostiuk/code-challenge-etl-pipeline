@@ -45,7 +45,7 @@ class Config:
             bulk_bytes=int(get("BULK_BYTES", str(10 * 1024 * 1024))),
             in_flight=int(get("IN_FLIGHT", "2")),
             shards=int(get("SHARDS", "2")),
-            index_org_arrays=get("INDEX_ORG_ARRAYS", "1") == "1",
+            index_org_arrays=get("INDEX_ORG_ARRAYS", "0") == "1",
             person_files=int(get("PERSON_FILES", "0")),
             max_retries=int(get("MAX_RETRIES", "8")),
             retry_backoff_s=float(get("RETRY_BACKOFF_S", "0.5")),

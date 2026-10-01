@@ -6,7 +6,7 @@ services:
       - xpack.security.enabled=false
       # Unconstrained service; heap and indexing buffer are benchmark knobs (scripts/bench.py).
       - ES_JAVA_OPTS=-Xms${ES_HEAP:-4g} -Xmx${ES_HEAP:-4g}
-      - indices.memory.index_buffer_size=${ES_INDEX_BUFFER:-30%}
+      - indices.memory.index_buffer_size=${ES_INDEX_BUFFER:-10%}
     ports:
       - "9200:9200"
     volumes:
