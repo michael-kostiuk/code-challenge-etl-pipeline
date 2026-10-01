@@ -16,6 +16,7 @@ docker compose up -d elasticsearch        # ES only, for iterating on the pipeli
 docker compose run --rm pipeline          # re-run the pipeline against a running ES
 docker compose down -v                    # wipe the es-data volume for a fresh run
 python3 bench/correctness.py              # gate tests (stdlib only; ES_URL defaults to localhost:9200)
+python3 scripts/verify_documents.py    # full-document sample check vs raw data (independent rebuild)
 bench/perf.sh                             # throughput report (stub — must be implemented)
 ```
 
