@@ -69,8 +69,7 @@ Mapping, join strategy and the other decisions are in [EVALUATION.md](EVALUATION
 
 Full numbers and method in [EVALUATION.md](EVALUATION.md#performance). Final clean run on a 16 vCPU /
 20 GB VM: 8,893 persons/s over the full run (9,754 in the person phase), 112.5 s wall-clock, pipeline
-peak memory 0.64 GiB, Elasticsearch peak memory 11.90 GiB (cgroup, includes page cache). Run-to-run
-variation on repeated full runs was about 10-15%.
+peak memory 0.64 GiB, Elasticsearch peak memory 11.90 GiB (cgroup, includes page cache). Across 22 verified full-data runs on this VM (`out/bench/`), throughput ranged 7,506–11,676 p/s; the figures above are one clean run.
 
 ## Verification
 

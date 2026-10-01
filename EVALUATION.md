@@ -11,7 +11,7 @@ Your own evaluation of your submission. Numbers, not adjectives.
 - How you measured these: the pipeline writes `out/metrics.json` (phase timings, counts, persons/s,
   cgroup `memory.peak`); `bench/perf.sh` prints it and reads the Elasticsearch container's cgroup
   `memory.peak`. One clean run (`docker compose down -v`, then `up --build`) on a 16 vCPU / 20 GB VM.
-  Repeated full runs vary by about 10-15%.
+  Across 22 verified full-data runs on this VM (`out/bench/`), throughput ranged 7,506–11,676 p/s; the figures above are one clean run.
 
 ## Correctness
 
@@ -38,9 +38,6 @@ What you verified, with counts:
 
 ## Trade-offs
 
-Schema decisions, join strategy (denormalized vs. parent-child vs. app-side
-join), why you picked what you picked.
-
 - **Join: denormalized, app-side, Redis as the org store.** Full org-feed records are embedded in
   `organizations[]` at ingest. Orgs (1.3 GB uncompressed, 99.4% referenced) do not fit in a 2 GiB
   process as Python objects. Redis was about 4x faster than LMDB and SQLite (6,142 vs 1,620 and 1,350
@@ -49,8 +46,7 @@ join), why you picked what you picked.
 - **`object`, not `nested`, for `roles` / `organizations`.** Required by the test `term` queries;
   cost: cross-role matches ("title X at org Y" can match different roles).
 - **`dynamic: false`, lean mapping.** Everything stays in `_source`; only searched fields are
-  indexed. Org `technologies` / `keywords` are stored, not indexed: indexing them cost about 8% in a
-  measured comparison, inside run-to-run noise, so they were left out to keep indexing lean.
+  indexed. Org `technologies` / `keywords` are kept in `_source` but not indexed, to keep indexing lean.
 - **Input `organizations[]` -> `affiliations`.** 17,302 persons already carry LinkedIn affiliations
   there; moved, not overwritten, so `organizations[]` means "joined employers" only.
 - **Unresolved refs flagged, not dropped.** `roles[].organization_resolved` plus
@@ -58,7 +54,6 @@ join), why you picked what you picked.
 - **Auto-generated `_id`.** Retries only clean rejections (whole-request 429/503, item-level
   429/5xx, connection never established); ambiguous failures fail the run, and the final count check
   catches duplicates. Measured against explicit ids: no throughput difference (10,972 vs 11,151
-  persons/s, median of 3); auto ids kept by choice, with the exactly-once guard above.
+  persons/s (median of 3 dedicated benchmark runs each, separate from the final run above)); auto ids kept by choice, with the exactly-once guard above.
 - **Tuning.** Defaults: 4 workers, 4 shards, 10 MB bulk, 2 in-flight per worker, ES heap 4g, index
-  buffer 10%, refresh disabled during load, async translog. Repeated A/B comparisons found no setting
-  that beat these beyond noise.
+  buffer 10%, refresh disabled during load, async translog.
