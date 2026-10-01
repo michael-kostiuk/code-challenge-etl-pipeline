@@ -44,8 +44,8 @@ async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: in
     try:
         connector = aiohttp.TCPConnector(limit=cfg.in_flight)
         timeout = aiohttp.ClientTimeout(total=300)
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
-            sender = BulkSender(session, cfg, dead_letter, counters)
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session, asyncio.TaskGroup() as tasks:
+            sender = BulkSender(session, tasks, cfg, dead_letter, counters)
             pending = None
             for batch in batched(read_records(files, "malformed_person", dead_letter, counters), cfg.lookup_batch):
                 ids: set[int] = set()

@@ -58,8 +58,9 @@ async def send_docs(server: FakeBulkServer, tmp_path, timeout_s: float = 300) ->
     counters = Counters()
     dead_letter = DeadLetter(tmp_path / "dead.ndjson")
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_s)) as session:
-            sender = BulkSender(session, cfg, dead_letter, counters)
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout_s)) as session, \
+                asyncio.TaskGroup() as tasks:
+            sender = BulkSender(session, tasks, cfg, dead_letter, counters)
             for doc_id, doc in DOCS:
                 await sender.add(doc_id, doc)
             await sender.flush()
@@ -101,8 +102,10 @@ def test_ambiguous_failure_fails_without_resending(tmp_path):
     # The server stores the documents, then answers after the client's 0.2s timeout: the outcome is unknown.
     server = FakeBulkServer(lambda doc_id, attempt: 201, answer_delay_s=1)
 
-    with pytest.raises(BulkFailed, match="outcome unknown"):
+    with pytest.raises(ExceptionGroup) as failure:
         asyncio.run(send_docs(server, tmp_path, timeout_s=0.2))
+
+    assert failure.group_contains(BulkFailed, match="outcome unknown")
 
     assert server.attempts["1"] == 1
     assert all(n == 1 for n in server.attempts.values())

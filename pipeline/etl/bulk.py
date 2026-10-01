@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import random
 import time
+from typing import NamedTuple
 
 import aiohttp
 import orjson
@@ -27,8 +28,9 @@ class BulkFailed(RuntimeError):
     """Documents could not be indexed after all retries; the run must fail."""
 
 
-class _Retryable(Exception):
-    pass
+class _Refused(NamedTuple):
+    """ES refused the whole request before writing anything, so it is safe to resend."""
+    reason: str
 
 
 def _bulk_body(items: list[tuple[int, bytes]]) -> bytes:
@@ -41,82 +43,79 @@ def _bulk_body(items: list[tuple[int, bytes]]) -> bytes:
 
 
 class BulkSender:
-    def __init__(self, session: aiohttp.ClientSession, cfg: Config, dead_letter: DeadLetter, counters: Counters):
+    """Buffers documents into `_bulk` requests and sends each as a task of `tasks`; a failed request
+    raises `BulkFailed` out of the TaskGroup, cancelling the other requests and the producer."""
+
+    def __init__(self, session: aiohttp.ClientSession, tasks: asyncio.TaskGroup, cfg: Config,
+                 dead_letter: DeadLetter, counters: Counters):
         self._session = session
+        self._tasks = tasks
         self._url = f"{cfg.es_url}/{cfg.index_name}/_bulk"
         self._max_bytes = cfg.bulk_bytes
         self._max_retries = cfg.max_retries
         self._backoff_s = cfg.retry_backoff_s
         self._slots = asyncio.Semaphore(cfg.in_flight)
-        self._tasks: set[asyncio.Task] = set()
         self._buffer: list[tuple[int, bytes]] = []
         self._buffered = 0
         self._dead_letter = dead_letter
         self._counters = counters
-        self._error: BaseException | None = None
 
     async def add(self, doc_id: int, doc: bytes) -> None:
-        self._raise_if_failed()
         self._buffer.append((doc_id, doc))
         self._buffered += len(doc)
         if self._buffered >= self._max_bytes:
             await self._dispatch()
 
     async def flush(self) -> None:
+        """Sends the buffered documents; the TaskGroup's exit waits for every request."""
         if self._buffer:
             await self._dispatch()
-        if self._tasks:
-            await asyncio.gather(*list(self._tasks), return_exceptions=True)
-        self._raise_if_failed()
 
     async def _dispatch(self) -> None:
         items, self._buffer, self._buffered = self._buffer, [], 0
         waited_from = time.monotonic()
         await self._slots.acquire()  # backpressure: at most `in_flight` requests per worker
         self._counters.add("slot_wait_s", time.monotonic() - waited_from)
-        task = asyncio.create_task(self._send(items))
-        self._tasks.add(task)
-        task.add_done_callback(self._on_done)
-
-    def _on_done(self, task: asyncio.Task) -> None:
-        self._tasks.discard(task)
-        self._slots.release()
-        if not task.cancelled() and task.exception() is not None and self._error is None:
-            self._error = task.exception()
-
-    def _raise_if_failed(self) -> None:
-        if self._error is not None:
-            raise self._error
+        self._tasks.create_task(self._send(items))
 
     async def _send(self, items: list[tuple[int, bytes]]) -> None:
         pending = items
-        for attempt in range(self._max_retries + 1):
-            if attempt:
-                await asyncio.sleep(self._backoff_s * 2 ** (attempt - 1) * (0.5 + random.random()))
-            body = _bulk_body(pending)
-            try:
-                async with self._session.post(self._url, data=body, headers=_HEADERS) as resp:
-                    payload = await resp.read()
-                    if resp.status in (429, 503):
-                        raise _Retryable(f"HTTP {resp.status}")
-                    if resp.status >= 500:
-                        raise BulkFailed(f"bulk request failed ambiguously: HTTP {resp.status}; not retried with auto IDs")
-                    if resp.status >= 400:
-                        raise BulkFailed(f"bulk request rejected: HTTP {resp.status}: {payload[:500]!r}")
-            except (aiohttp.ClientConnectorError, _Retryable) as err:
-                self._counters.add("retries")
-                log("bulk_retry", level="warning", attempt=attempt + 1, docs=len(pending), error=str(err))
-                continue
-            except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                raise BulkFailed(
-                    f"bulk request outcome unknown ({err!r}); not retried because auto-generated IDs could duplicate documents"
-                ) from err
-            self._counters.add("bytes_sent", len(body))
-            pending = self._handle_items(pending, orjson.loads(payload))
-            if not pending:
-                return
-            self._counters.add("rejected_items", len(pending))
-        raise BulkFailed(f"{len(pending)} documents still failing after {self._max_retries} retries")
+        try:
+            for attempt in range(self._max_retries + 1):
+                if attempt:
+                    await asyncio.sleep(self._backoff_s * 2 ** (attempt - 1) * (0.5 + random.random()))
+                body = _bulk_body(pending)
+                response = await self._post(body)
+                if isinstance(response, _Refused):
+                    self._counters.add("retries")
+                    log("bulk_retry", level="warning", attempt=attempt + 1, docs=len(pending), error=response.reason)
+                    continue
+                self._counters.add("bytes_sent", len(body))
+                pending = self._handle_items(pending, response)
+                if not pending:
+                    return
+                self._counters.add("rejected_items", len(pending))
+            raise BulkFailed(f"{len(pending)} documents still failing after {self._max_retries} retries")
+        finally:
+            self._slots.release()
+
+    async def _post(self, body: bytes) -> dict | _Refused:
+        """The parsed `_bulk` response, or `_Refused` when resending is safe. Raises `BulkFailed` when
+        the request is invalid or its outcome is unknown (resending could duplicate documents)."""
+        try:
+            async with self._session.post(self._url, data=body, headers=_HEADERS) as resp:
+                status, payload = resp.status, await resp.read()
+        except aiohttp.ClientConnectorError as err:  # never connected: nothing was sent
+            return _Refused(str(err))
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise BulkFailed(
+                f"bulk request outcome unknown ({err!r}); not retried because auto-generated IDs could duplicate documents"
+            ) from err
+        if status in (429, 503):
+            return _Refused(f"HTTP {status}")
+        if status >= 400:
+            raise BulkFailed(f"bulk request failed: HTTP {status}: {payload[:500]!r}; not retried with auto IDs")
+        return orjson.loads(payload)
 
     def _handle_items(self, pending: list[tuple[int, bytes]], response: dict) -> list[tuple[int, bytes]]:
         """Counts successes, dead-letters permanent failures, returns documents worth retrying."""
