@@ -4,20 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Forager take-home: an ETL pipeline that streams two gzipped NDJSON feeds (1M persons, ~529K orgs), joins them, and bulk-indexes the merged documents into a single Elasticsearch index named `persons`. **Primary score is ingestion rate (persons/sec)**, gated on `bench/correctness.py` passing. Code quality and AI-workflow evidence (`AI_NOTES.md`, committed `.claude/` artifacts) are also graded. The full brief is in `README.md`; data schemas are in `data/README.md`.
+Forager take-home: an ETL pipeline that streams two gzipped NDJSON feeds (1M persons, ~529K orgs), joins them, and bulk-indexes the merged documents into a single Elasticsearch index named `persons`. **Primary score is ingestion rate (persons/sec)**, gated on `bench/correctness.py` passing. Code quality and AI-workflow evidence (`AI_NOTES.md`, committed `.claude/` artifacts) are also graded. The original brief is in `docs/BRIEF.md`; data schemas are in `data/README.md`.
 
-Currently `pipeline/main.py` is a stub (connects to ES and lists data files) — the pipeline itself is still to be built.
+Pipeline code lives in `pipeline/etl/` (entry `pipeline/main.py`). Design: `docs/superpowers/specs/2026-10-01-etl-pipeline-design.md`. All tunables are env vars read in `pipeline/etl/config.py`. The org store is Redis; the LMDB and SQLite alternatives are unwired benchmark evidence in `scripts/reference/alt_orgstores.py`.
 
 ## Commands
 
 ```bash
-docker compose up --build                 # ES 8.13 + pipeline, runs ingest end-to-end
-docker compose up -d elasticsearch        # ES only, for iterating on the pipeline
-docker compose run --rm pipeline          # re-run the pipeline against a running ES
-docker compose down -v                    # wipe the es-data volume for a fresh run
-python3 bench/correctness.py              # gate tests (stdlib only; ES_URL defaults to localhost:9200)
-python3 scripts/verify_documents.py    # full-document sample check vs raw data (independent rebuild)
-bench/perf.sh                             # throughput report (stub — must be implemented)
+docker compose up --build                  # ES 8.13 + Redis + pipeline, runs ingest end-to-end
+docker compose up -d elasticsearch redis   # backing services only, for iterating on the pipeline
+docker compose run --rm pipeline           # re-run the pipeline against running services
+docker compose down -v                     # wipe the es-data volume for a fresh run
+python3 bench/correctness.py               # gate tests (stdlib only; ES_URL defaults to localhost:9200)
+bench/perf.sh                              # throughput report from out/metrics.json
+docker compose run --rm pipeline python -m pytest -q tests   # all 8 tests (unit + e2e; needs ES/Redis)
+docker compose run --rm --no-deps pipeline python -m pytest -q tests/test_transform.py tests/test_bulk.py  # unit only
+python3 scripts/verify_index.py            # full-data counts vs the independent profiler (scripts/profile_data.py)
+python3 scripts/verify_documents.py        # independent full-document sample check against the raw data
+python3 scripts/bench.py LABEL -e KEY=VAL  # one benchmark config; --table to compare
 ```
 
 `./pipeline` is bind-mounted at `/app`, so edits to Python files take effect on the next `docker compose run` without rebuilding; changes to `requirements.txt` or the Dockerfile need `--build`.
@@ -42,4 +46,4 @@ bench/perf.sh                             # throughput report (stub — must be 
 
 ## Deliverables to keep in sync
 
-`README.md` (replace with own), `AI_NOTES.md` and `EVALUATION.md` (templates to fill in with real numbers), and `bench/perf.sh` (must print persons/sec, wall-clock total, peak pipeline memory — typically read from a metrics file the pipeline writes).
+`README.md` (own, written; original brief kept in `docs/BRIEF.md`), `AI_NOTES.md` and `EVALUATION.md` (templates to fill in with real numbers), and `bench/perf.sh` (must print persons/sec, wall-clock total, peak pipeline memory — typically read from a metrics file the pipeline writes).
