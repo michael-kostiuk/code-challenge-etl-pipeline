@@ -49,14 +49,15 @@ join), why you picked what you picked.
   A/B runs, 3 per arm, on a 20 GB VM. Noise now: identical defaults
   (`ab2-noise`, 2 runs) 10,996 / 15,170 p/s phase (32% spread); arm
   spreads 10-16% (one 40%). Rule: adopt only if the median wins by >5%.
-  - **Shards 2 vs 4** (2 files, phase): 15,293 vs 13,518 (+13%). Kept 2.
+  - **Shards 2 vs 4:** subset (phase) 15,293 vs 13,518 (+13% for 2); full data
+    (p/s, 3 runs each) 8,400 vs 9,104 (+8.4% for 4). Score is full-run p/s, so 4.
   - **ES index buffer 30% vs 10%** (2 files, phase): 12,264 vs 12,475 (-2%).
     Reverted to 10%.
   - **Org arrays indexed 1 vs 0** (full, p/s): 8,500 vs 9,238 (-8.0%, inside
     spread). Reverted to 0.
   - Bulk 10 MB, in-flight 2, workers 4, heap 4g: no single-run sweep beat them
     beyond noise.
-  - **Net result:** `final2` (3 full runs, verified) median 8,871 p/s vs 10,202
-    for one same-environment run of the starting defaults (`ab2-startdefaults`).
-    No gain from tuning (the start-defaults run was 15% higher); the 2-file
-    shards win is not confirmed on full data.
+  - **Net result:** final = the 4-shard `ab3` runs (3 full, verified): median
+    9,104 p/s (7,566-9,469) vs 10,202 for one `ab2-startdefaults` run (same
+    config). No gain from tuning; the defaults are the starting ones, and the
+    gap between those two measurements is run-to-run noise.
