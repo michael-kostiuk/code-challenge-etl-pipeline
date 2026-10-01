@@ -35,7 +35,6 @@
 ## Deviations from spec (deliberate, minor)
 
 - There is no in-memory `OrgStore`. The transform tests pass a plain dict, and the store test exercises the real backends.
-- Dead letters are one file per process under `out/dead_letter/` (`orgs-N.ndjson`, `persons-N.ndjson`), not a single `out/dead_letter.ndjson`. Concurrent appends from several processes to one file can interleave long lines.
 - The org load runs before index creation, so an unreachable org store fails before Elasticsearch is touched.
 - The fallback peak-memory source is the largest single-process RSS, not a sum. The sum isn't available without polling; cgroup `memory.peak` is the primary source.
 
@@ -50,7 +49,7 @@
 | `pipeline/etl/__init__.py` | package marker |
 | `pipeline/etl/config.py` | `Config` dataclass, built from environment variables |
 | `pipeline/etl/metrics.py` | `log()`, `Counters`, `totals()`, `ProgressReporter`, `peak_memory_bytes()` |
-| `pipeline/etl/deadletter.py` | `DeadLetter`, an append-only NDJSON file |
+| `pipeline/etl/deadletter.py` | `DeadLetter`, an append-only NDJSON file shared by all processes (`flock` per write) |
 | `pipeline/etl/reader.py` | `read_lines()`, `parse_envelope()`, `MalformedRecord`, `malformed_fields()` |
 | `pipeline/etl/transform.py` | `referenced_org_ids()`, `build_document()` |
 | `pipeline/etl/orgstore.py` | `RedisOrgStore`, `LmdbOrgStore`, `SqliteOrgStore`, `create_store()`, `open_store()` |
@@ -387,9 +386,14 @@ def peak_memory_bytes() -> tuple[int, str]:
 - [ ] **Step 7: Write `pipeline/etl/deadletter.py`**
 
 ```python
-"""Append-only NDJSON record of inputs the pipeline could not index (one file per process)."""
+"""Append-only NDJSON record of inputs the pipeline could not index.
+
+All processes append to the same file. Each record is one unbuffered write under an exclusive
+flock, so concurrent writers never interleave lines. Dead letters are rare (0 in the real data),
+so the lock costs nothing measurable."""
 from __future__ import annotations
 
+import fcntl
 from pathlib import Path
 
 import orjson
@@ -405,7 +409,11 @@ class DeadLetter:
         if self._fh is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self._fh = open(self.path, "ab", buffering=0)
-        self._fh.write(orjson.dumps({"kind": kind, **fields}, default=str) + b"\n")
+        fcntl.flock(self._fh, fcntl.LOCK_EX)
+        try:
+            self._fh.write(orjson.dumps({"kind": kind, **fields}, default=str) + b"\n")
+        finally:
+            fcntl.flock(self._fh, fcntl.LOCK_UN)
         self.count += 1
 
     def close(self) -> None:
@@ -1247,8 +1255,7 @@ def test_pipeline_indexes_joined_persons_and_reruns_cleanly(es, tmp_path):
     assert p103["affiliations"] == [{"name": "Chess Club"}]
     assert p103["unresolved_organization_ids"] == [999]
     assert p103["roles"][0]["organization_resolved"] is False
-    dead = [json.loads(line) for f in (tmp_path / "out" / "dead_letter").glob("*.ndjson")
-            for line in f.read_text().splitlines()]
+    dead = [json.loads(line) for line in (tmp_path / "out" / "dead_letter.ndjson").read_text().splitlines()]
     assert [(d["kind"], d["file"], d["line"]) for d in dead] == [("malformed_person", "persons_1.json.gz", 2)]
     metrics = json.loads((tmp_path / "out" / "metrics.json").read_text())
     assert (metrics["ok"], metrics["es_count"], metrics["counters"]["unresolved_refs"],
@@ -1493,7 +1500,7 @@ def load_orgs(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> No
 
 
 def _load_files(cfg: Config, files: list[Path], batches, counters: Counters, loader_id: int) -> None:
-    dead_letter = DeadLetter(cfg.out_dir / "dead_letter" / f"orgs-{loader_id}.ndjson")
+    dead_letter = DeadLetter(cfg.out_dir / "dead_letter.ndjson")
     store = open_store(cfg) if batches is None else None
     sink = store.put_many if store is not None else batches.put
     batch: list[tuple[int, bytes]] = []
@@ -1565,7 +1572,7 @@ def run_worker(cfg: Config, files: list[Path], counters: Counters, worker_id: in
 
 
 async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: int) -> None:
-    dead_letter = DeadLetter(cfg.out_dir / "dead_letter" / f"persons-{worker_id}.ndjson")
+    dead_letter = DeadLetter(cfg.out_dir / "dead_letter.ndjson")
     store = open_store(cfg)
     lag_watch = asyncio.create_task(_watch_loop_lag(counters))
     try:
@@ -1638,7 +1645,6 @@ async def _watch_loop_lag(counters: Counters, interval_s: float = 0.05) -> None:
 from __future__ import annotations
 
 import multiprocessing as mp
-import shutil
 import time
 from contextlib import contextmanager
 
@@ -1683,7 +1689,7 @@ def _run(cfg: Config, started: float) -> bool:
         person_files = person_files[: cfg.person_files]
     if not org_files or not person_files:
         raise RuntimeError(f"no input files under {cfg.data_dir}/organization or {cfg.data_dir}/person")
-    shutil.rmtree(cfg.out_dir / "dead_letter", ignore_errors=True)
+    (cfg.out_dir / "dead_letter.ndjson").unlink(missing_ok=True)
 
     ctx = mp.get_context("spawn")  # fresh interpreters: no inherited event loops or connections
     blocks = [Counters.shared(ctx) for _ in range(cfg.loaders + cfg.workers)]

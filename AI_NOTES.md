@@ -30,6 +30,9 @@ config and skip committing it; the interviewer reads the real files.
 claude init
 evaluation of main challenges before we see data
 profile data to see metrics
+superpowers: brainstorm - investigate candidates and approaches before we jump to actual spec
+superpowers: spec - created spec with we are actually trying to build here, what approaches we selected for benchmark to be selected for final impolementation
+superpowers: plan - created and reviewed plan what actual architecture will be introduced, and how benchmarks will be resolved
 
 <!-- Describe the loop structures you ran — not "I prompted X" but the shape.
 
