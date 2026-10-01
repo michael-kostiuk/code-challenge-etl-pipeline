@@ -4,7 +4,9 @@ services:
     environment:
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms2g -Xmx2g
+      # Unconstrained service; heap and indexing buffer are benchmark knobs (scripts/bench.py).
+      - ES_JAVA_OPTS=-Xms${ES_HEAP:-4g} -Xmx${ES_HEAP:-4g}
+      - indices.memory.index_buffer_size=${ES_INDEX_BUFFER:-10%}
     ports:
       - "9200:9200"
     volumes:
@@ -14,6 +16,16 @@ services:
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -q '\"status\":\"\\(green\\|yellow\\)\"'"]
       interval: 1s
       timeout: 3s
+      retries: 120
+
+  # Org lookup store for the join (ORG_STORE=redis). Ephemeral cache: persistence off.
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
       retries: 30
 
   pipeline:
@@ -21,12 +33,19 @@ services:
     depends_on:
       elasticsearch:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       - ES_URL=http://elasticsearch:9200
+      - REDIS_URL=redis://redis:6379/0
       - DATA_DIR=/data
+      - OUT_DIR=/out
+      - STAGE_DIR=/stage
     volumes:
       - ./data:/data:ro
       - ./pipeline:/app
+      - ./out:/out
+      - stage:/stage
     # Hard ceiling — applies ONLY to the pipeline service. Do not raise.
     # The grader runs the pipeline against the same limits.
     # ES (and any other staging services you add) are unconstrained — give
@@ -37,3 +56,4 @@ services:
 
 volumes:
   es-data:
+  stage:
