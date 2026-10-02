@@ -33,6 +33,9 @@ profile data to see metrics
 superpowers: brainstorm - investigate candidates and approaches before we jump to actual spec
 superpowers: spec - created spec with we are actually trying to build here, what approaches we selected for benchmark to be selected for final impolementation
 superpowers: plan - created and reviewed plan what actual architecture will be introduced, and how benchmarks will be resolved
+subagent driven plan execution
+/thermo-nuclear code review loop until approved
+spot check indexed  documents
 
 <!-- Describe the loop structures you ran — not "I prompted X" but the shape.
 
@@ -50,6 +53,8 @@ I accepted it after reading the diff."
 
 Specific examples — agent decisions you overrode and why. This is the most
 important section.
+
+agent planned one [file-based] dlq per process - overriden with lock on single dql
 
 ## Time leverage
 
