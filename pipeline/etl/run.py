@@ -1,6 +1,7 @@
 """Orchestration: org load -> index setup -> person workers -> finalize -> verify -> metrics."""
 from __future__ import annotations
 
+import logging
 import multiprocessing as mp
 import time
 from contextlib import contextmanager
@@ -10,33 +11,38 @@ from elasticsearch import Elasticsearch
 
 from etl.config import Config
 from etl.index_admin import create_index, finalize_index
-from etl.metrics import Counters, ProgressReporter, log, peak_memory_bytes, totals
+from etl.logs import setup_logging
+from etl.metrics import Counters, ProgressReporter, peak_memory_bytes, totals
 from etl.orgload import load_orgs
 from etl.persons import run_persons
 
+logger = logging.getLogger(__name__)
+
 
 def main() -> int:
-    return run(Config.from_env())
+    cfg = Config.from_env()
+    setup_logging(cfg.log_level)
+    return run(cfg)
 
 
 def run(cfg: Config) -> int:
     started = time.monotonic()
-    log("run_start", config=cfg.as_log_fields())
+    logger.info("run_start", extra={"config": cfg.as_log_fields()})
     try:
         ok = _run(cfg, started)
-    except Exception as err:
-        log("run_failed", level="error", error=repr(err))
+    except Exception:
+        logger.exception("run_failed")
         return 1
     return 0 if ok else 1
 
 
 @contextmanager
 def _phase(name: str, timings: dict[str, float]):
-    log("phase_start", phase=name)
+    logger.info("phase_start", extra={"phase": name})
     t = time.monotonic()
     yield
     timings[name] = round(time.monotonic() - t, 2)
-    log("phase_end", phase=name, duration_s=timings[name])
+    logger.info("phase_end", extra={"phase": name, "duration_s": timings[name]})
 
 
 def _run(cfg: Config, started: float) -> bool:
@@ -88,5 +94,5 @@ def _run(cfg: Config, started: float) -> bool:
     }
     cfg.out_dir.mkdir(parents=True, exist_ok=True)
     (cfg.out_dir / "metrics.json").write_bytes(orjson.dumps(metrics, option=orjson.OPT_INDENT_2))
-    log("summary", level="info" if ok else "error", **metrics)
+    logger.log(logging.INFO if ok else logging.ERROR, "summary", extra=metrics)
     return ok

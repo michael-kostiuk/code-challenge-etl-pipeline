@@ -24,6 +24,7 @@ class Config:
     max_retries: int
     retry_backoff_s: float
     progress_interval_s: float
+    log_level: str
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] = os.environ) -> "Config":
@@ -44,6 +45,7 @@ class Config:
             max_retries=int(get("MAX_RETRIES", "8")),
             retry_backoff_s=float(get("RETRY_BACKOFF_S", "0.5")),
             progress_interval_s=float(get("PROGRESS_INTERVAL_S", "5")),
+            log_level=get("LOG_LEVEL", "INFO"),
         )
 
     def as_log_fields(self) -> dict:

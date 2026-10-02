@@ -3,6 +3,7 @@ org lookups and bulk requests with the CPU-bound parse/transform work."""
 from __future__ import annotations
 
 import asyncio
+import logging
 from contextlib import aclosing
 from itertools import batched
 from pathlib import Path
@@ -14,7 +15,8 @@ import uvloop
 from etl.bulk import BulkSender
 from etl.config import Config
 from etl.deadletter import DeadLetter
-from etl.metrics import Counters, log
+from etl.logs import setup_logging
+from etl.metrics import Counters
 from etl.orgstore import OrgReader
 from etl.procs import run_all, split_files
 from etl.reader import read_records
@@ -22,16 +24,19 @@ from etl.transform import build_document, referenced_org_ids
 
 Batch = tuple[tuple[int, dict], ...]
 
+logger = logging.getLogger(__name__)
+
 
 def run_persons(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> None:
     run_all(ctx, run_worker, split_files(files, cfg.workers), blocks, cfg, name="person-worker")
 
 
 def run_worker(cfg: Config, files: list[Path], counters: Counters, worker_id: int) -> None:
+    setup_logging(cfg.log_level)
     try:
         uvloop.run(_run(cfg, files, counters, worker_id))
-    except Exception as err:
-        log("worker_failed", level="error", worker=worker_id, error=repr(err))
+    except Exception:
+        logger.exception("worker_failed", extra={"worker": worker_id})
         raise SystemExit(1)
 
 

@@ -1,16 +1,13 @@
-"""Structured logging, cross-process counters and resource metrics."""
+"""Cross-process counters, progress reporting and resource metrics."""
 from __future__ import annotations
 
 import array
+import logging
 import resource
-import sys
 import threading
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
-
-import orjson
 
 FIELDS = (
     "orgs_loaded",
@@ -29,16 +26,7 @@ FIELDS = (
 )
 _INDEX = {name: i for i, name in enumerate(FIELDS)}
 
-
-def log(event: str, level: str = "info", **fields) -> None:
-    record = {
-        "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-        "level": level,
-        "event": event,
-        **fields,
-    }
-    sys.stdout.write(orjson.dumps(record, default=str).decode() + "\n")
-    sys.stdout.flush()
+logger = logging.getLogger(__name__)
 
 
 class Counters:
@@ -85,8 +73,7 @@ class ProgressReporter(threading.Thread):
         while not self._stopped.wait(self._interval_s):
             t = totals(self._blocks)
             now = time.monotonic()
-            log(
-                "progress",
+            logger.info("progress", extra=dict(
                 orgs_loaded=int(t["orgs_loaded"]),
                 persons_indexed=int(t["docs_indexed"]),
                 rate_now=round((t["docs_indexed"] - last_docs) / (now - last_t)),
@@ -98,7 +85,7 @@ class ProgressReporter(threading.Thread):
                 unresolved_refs=int(t["unresolved_refs"]),
                 loop_blocked_s=round(t["loop_blocked_s"], 1),
                 slot_wait_s=round(t["slot_wait_s"], 1),
-            )
+            ))
             last_t, last_docs = now, t["docs_indexed"]
 
     def stop(self) -> None:

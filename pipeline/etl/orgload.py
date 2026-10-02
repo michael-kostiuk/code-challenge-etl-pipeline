@@ -8,6 +8,7 @@ import orjson
 
 from etl.config import Config
 from etl.deadletter import DeadLetter
+from etl.logs import setup_logging
 from etl.metrics import Counters
 from etl.orgstore import OrgWriter
 from etl.procs import run_all, split_files
@@ -26,6 +27,7 @@ def load_orgs(cfg: Config, files: list[Path], ctx, blocks: list[Counters]) -> No
 
 
 def _load_files(cfg: Config, files: list[Path], counters: Counters, loader_id: int) -> None:
+    setup_logging(cfg.log_level)
     dead_letter = DeadLetter(cfg.out_dir / "dead_letter.ndjson")
     store = OrgWriter(cfg.redis_url)
     try:

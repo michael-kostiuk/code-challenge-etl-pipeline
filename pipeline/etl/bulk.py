@@ -10,6 +10,7 @@ retried; any ambiguous failure (timeout, dropped connection, other 5xx) raises `
 from __future__ import annotations
 
 import asyncio
+import logging
 import random
 import time
 from typing import NamedTuple
@@ -19,9 +20,11 @@ import orjson
 
 from etl.config import Config
 from etl.deadletter import DeadLetter
-from etl.metrics import Counters, log
+from etl.metrics import Counters
 
 _HEADERS = {"Content-Type": "application/x-ndjson"}
+
+logger = logging.getLogger(__name__)
 
 
 class BulkFailed(RuntimeError):
@@ -88,7 +91,7 @@ class BulkSender:
                 response = await self._post(body)
                 if isinstance(response, _Refused):
                     self._counters.add("retries")
-                    log("bulk_retry", level="warning", attempt=attempt + 1, docs=len(pending), error=response.reason)
+                    logger.warning("bulk_retry", extra={"attempt": attempt + 1, "docs": len(pending), "error": response.reason})
                     continue
                 self._counters.add("bytes_sent", len(body))
                 pending = self._handle_items(pending, response)
