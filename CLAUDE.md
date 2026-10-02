@@ -29,7 +29,7 @@ python3 scripts/bench.py LABEL -e KEY=VAL  # one benchmark config; --table to co
 ## Hard constraints (do not violate)
 
 - `pipeline` service: `mem_limit: 2g`, `cpus: 4.0` — never raise these. ES and any added staging services (Redis, Postgres, etc.) are unconstrained and may be tuned freely in `docker-compose.yml` / `es-config/elasticsearch.yml`.
-- Do not modify `bench/correctness.py` or `bench/expected.json`. (The `expected.json` in the repo has placeholder `0` counts; the real one ships in the data bundle.)
+- Do not modify `bench/correctness.py`. The official `bench/expected.json` was not in the data bundle, so it holds our computed counts (7,081 / 647, confirmed by the independent profiler); the shipped placeholder is `bench/expected.original.json`. Do not change either without the user's say-so.
 - No preprocessing of data outside the pipeline; everything must run from `docker compose up` on a fresh machine with only Docker.
 - Any language is allowed; if switching from Python, update `pipeline/Dockerfile` and the compose `command`.
 

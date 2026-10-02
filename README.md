@@ -30,9 +30,7 @@ pipeline container (2 GB, 4 CPU)
 - Processes for CPU (gunzip, parse, transform, serialize); asyncio inside each worker overlaps Redis
   lookups and bulk I/O with CPU work. A per-worker semaphore bounds in-flight bulk requests.
 - Organizations are stored as compact JSON in Redis and spliced into each document with
-  `orjson.Fragment`, so they are never re-parsed. `organizations[]` holds the full org-feed record.
-- Unresolved org ids keep the role (`organization_resolved: false`) and are listed in
-  `unresolved_organization_ids`.
+  `orjson.Fragment`, so they are never re-parsed.
 - Code is in `pipeline/etl/`; design in
   [docs/superpowers/specs/2026-10-01-etl-pipeline-design.md](docs/superpowers/specs/2026-10-01-etl-pipeline-design.md).
 
@@ -58,18 +56,44 @@ Environment variables read in `pipeline/etl/config.py` (set in `docker-compose.y
 | `MAX_RETRIES` | 8 | Attempts per bulk request or item for clean rejections |
 | `RETRY_BACKOFF_S` | 0.5 | Base of the exponential backoff |
 | `PROGRESS_INTERVAL_S` | 5 | Progress log interval |
+| `LOG_LEVEL` | `INFO` | Level for all loggers, including library ones; JSON lines on stdout |
 
 Compose-level (Elasticsearch container): `ES_HEAP` (default `4g`), `ES_INDEX_BUFFER` (default `10%`).
 
-## Schema and trade-offs
+## Schema
 
-Mapping, join strategy and the other decisions are in [EVALUATION.md](EVALUATION.md#trade-offs).
+One document per person: the unwrapped `serialized_data`, with `organizations[]` set to the full
+org-feed records of the person's roles (deduplicated, in role order). Dangling references are flagged
+with `roles[].organization_resolved: false` and `unresolved_organization_ids`. The input's own
+`organizations[]` (LinkedIn affiliations, not employers) is moved to `affiliations`.
+
+Explicit mapping with `dynamic: false` (`pipeline/etl/index_admin.py`): every field stays in
+`_source`, only the fields below are indexed.
+
+| Fields | Mapping | Why |
+|---|---|---|
+| `forager_id`, `linkedin_id`, `roles.organization_id`, `organizations.forager_id` / `.linkedin_id`, `unresolved_organization_ids` | `long` | id lookups, joins back to the feeds |
+| `first_name`, `last_name`, `headline` | `text` | full-text search only |
+| `country`, `city`, `industry`, `skills`, `organizations.domain` / `.industry` / `.country` | `keyword`, `ignore_above: 256` | filters and facets; 256 is the dynamic-mapping default |
+| `roles.role_title`, `organizations.name` | `text` + `.keyword` | search, plus the exact `term` queries of `bench/correctness.py` |
+| `linkedin_slug` | `keyword`, `doc_values: false` | exact lookup only, never sorted or aggregated |
+| `roles.start_date`, `roles.end_date` | `date`, `ignore_malformed` | one bad date must not reject the person |
+| `roles.organization_resolved` | `boolean` | find unresolved references |
+| `roles`, `organizations` | `object` | the `term` queries above do not match inside `nested` |
+| `affiliations` | `enabled: false` | returned, never queried; not even parsed |
+| org `technologies` / `keywords`, all other fields | unmapped | `_source` only |
+
+Why these choices over the alternatives (`index: false`, `nested`, indexing all org fields), and the
+join strategy: [EVALUATION.md](EVALUATION.md#trade-offs).
 
 ## Performance
 
-Full numbers and method in [EVALUATION.md](EVALUATION.md#performance). Final clean run on a 16 vCPU /
-20 GB VM: 8,893 persons/s over the full run (9,754 in the person phase), 112.5 s wall-clock, pipeline
-peak memory 0.64 GiB, Elasticsearch peak memory 11.90 GiB (cgroup, includes page cache). Across 22 verified full-data runs on this VM (`out/bench/`), throughput ranged 7,506–11,676 p/s; the figures above are one clean run.
+Full numbers and method in [EVALUATION.md](EVALUATION.md#performance). Final clean run on an Apple
+M4 Pro (Docker Desktop VM: 12 CPUs, 8 GB): 28,900 persons/s over the full run (34,518 in the person
+phase), 34.6 s wall-clock, pipeline peak memory 0.87 GiB, Elasticsearch peak memory 5.21 GiB (cgroup,
+includes page cache). Across 8 full-data runs with default settings on this machine, throughput ranged
+28,224–37,978 p/s (clean runs at the low end, re-runs against warm services at the high end); the
+figures above are one clean run.
 
 ## Verification
 
@@ -90,8 +114,9 @@ peak memory 0.64 GiB, Elasticsearch peak memory 11.90 GiB (cgroup, includes page
   roles of one person. The provided `term` queries require `object`.
 - Single-node Elasticsearch, 0 replicas.
 - Dell count: 647 persons by the org-feed name "Dell Technologies"; 570 if counted by
-  `roles[].organization_name`. `bench/expected.json` in the repo is a placeholder (0 counts), so the
-  two term checks of `bench/correctness.py` fail until the official file is available.
+  `roles[].organization_name`. The official `bench/expected.json` was not in the data bundle, so the
+  repo's copy holds our computed counts (7,081 / 647); the shipped placeholder is
+  `bench/expected.original.json`.
 - Document ids are auto-generated. A network failure after a request may have reached Elasticsearch
   fails the run instead of retrying; only clean rejections are retried.
 - `pytest` is installed in the runtime image (`pipeline/requirements-dev.txt`).
