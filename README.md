@@ -97,12 +97,12 @@ join strategy: [EVALUATION.md](EVALUATION.md#trade-offs).
 
 ## Performance
 
-Full numbers and method in [EVALUATION.md](EVALUATION.md#performance). Final clean run on an Apple
-M4 Pro (Docker Desktop VM: 12 CPUs, 8 GB): 28,900 persons/s over the full run (34,518 in the person
-phase), 34.6 s wall-clock, pipeline peak memory 0.87 GiB, Elasticsearch peak memory 5.21 GiB (cgroup,
-includes page cache). Across 8 full-data runs with default settings on this machine, throughput ranged
-28,224–37,978 p/s (clean runs at the low end, re-runs against warm services at the high end); the
-figures above are one clean run.
+Full numbers and method in [EVALUATION.md](EVALUATION.md#performance). Median of 3 clean runs on an
+Apple M4 Pro (Docker Desktop VM: 12 CPUs, 8 GB): 27,383 persons/s over the full run (32,605 in the
+person phase), 36.5 s wall-clock, pipeline peak memory 0.85 GiB, Elasticsearch peak memory 5.25 GiB
+(cgroup, includes page cache). The three clean runs ranged 24,662–28,324 p/s; re-runs against warm
+services run faster. The final mapping (keyword ids, name `.keyword`, `date_updated`) costs about 6%
+against the previous one in interleaved A/B runs.
 
 ## Verification
 

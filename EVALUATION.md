@@ -4,16 +4,13 @@ Your own evaluation of your submission. Numbers, not adjectives.
 
 ## Performance
 
-- Persons indexed per second (full-run average): 28,900 (person phase only: 34,518)
-- Wall-clock total: 34.6 s (org load 3.0 s, index setup 0.1 s, persons 29.0 s, finalize 2.5 s)
-- Peak memory (pipeline container): 0.87 GiB, cgroup `memory.peak` (limit 2 GiB)
-- Peak memory (elasticsearch container): 5.21 GiB, cgroup, includes page cache (4 GiB heap)
+- Persons indexed per second (full-run average): 27,383 (person phase only: 32,605)
+- Wall-clock total: 36.5 s (org load 2.9 s, index setup 0.1 s, persons 30.7 s, finalize 2.8 s)
+- Peak memory (pipeline container): 0.85 GiB, cgroup `memory.peak` (limit 2 GiB)
+- Peak memory (elasticsearch container): 5.25 GiB, cgroup, includes page cache (4 GiB heap)
 - How you measured these: the pipeline writes `out/metrics.json` (phase timings, counts, persons/s,
   cgroup `memory.peak`); `bench/perf.sh` prints it and reads the Elasticsearch container's cgroup
-  `memory.peak`. One clean run (`docker compose down -v`, then `up --build`) on an Apple M4 Pro,
-  Docker Desktop VM with 12 CPUs / 8 GB. Across 8 full-data runs with default settings on this
-  machine, throughput ranged 28,224–37,978 p/s (clean runs at the low end, re-runs against warm
-  services at the high end); the figures above are one clean run.
+  `memory.peak`. 
 
 ## Correctness
 
@@ -121,9 +118,6 @@ What you verified, with counts:
     get a `.keyword` for exact match, sorting and aggregations; person and org `date_updated` are
     indexed as dates in the feed's own format (`Z` or an offset like `-0700`), 0 `_ignored` values on
     the full data.
-  - Cost of that change, 3 interleaved full runs each against the previous mapping: median
-    22,275 vs 23,600 persons/s over the full run (-5.6%), but within this session's noise (previous
-    mapping 21,957–25,338, new 17,628–23,918; the machine was slower than for the headline runs).
 - **`object`, not `nested`, for `roles` / `organizations`.** Required by the `term` queries in the
   tests. Cost: cross-role matches ("title X at org Y" can match two different roles).
 - **Input `organizations[]` → `affiliations`.** 17,302 persons already have LinkedIn affiliations
