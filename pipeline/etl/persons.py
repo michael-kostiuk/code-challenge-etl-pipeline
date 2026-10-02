@@ -20,7 +20,7 @@ from etl.metrics import Counters
 from etl.orgstore import OrgReader
 from etl.procs import run_all, split_files
 from etl.reader import read_records
-from etl.transform import build_document, referenced_org_ids
+from etl.transform import build_document, check_person, referenced_org_ids
 
 Batch = tuple[tuple[int, dict], ...]
 
@@ -49,7 +49,7 @@ async def _run(cfg: Config, files: list[Path], counters: Counters, worker_id: in
         timeout = aiohttp.ClientTimeout(total=300)
         async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session, asyncio.TaskGroup() as tasks:
             sender = BulkSender(session, tasks, cfg, dead_letter, counters)
-            batches = batched(read_records(files, "malformed_person", dead_letter, counters), cfg.lookup_batch)
+            batches = batched(read_records(files, "malformed_person", dead_letter, counters, check_person), cfg.lookup_batch)
             async with aclosing(_with_orgs(batches, store)) as joined:
                 async for batch, orgs in joined:
                     await _emit(batch, orgs, sender, counters)

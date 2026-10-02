@@ -26,4 +26,5 @@ print(f"peak memory, pipeline:            {gib(m['peak_memory_bytes'])} ({m['pea
 print(f"peak memory, elasticsearch:       {gib(es_peak) if es_peak else 'n/a (container not running)'}")
 print(f"unresolved org refs:              {c['unresolved_refs']:,} in {c['persons_with_unresolved']:,} persons")
 print(f"retries / rejected / failed docs: {c['retries']} / {c['rejected_items']} / {c['failed_docs']}")
+print(f"malformed input lines:            {c['malformed']} (dead_letter.ndjson)")
 PYEOF

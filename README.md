@@ -67,13 +67,22 @@ org-feed records of the person's roles (deduplicated, in role order). Dangling r
 with `roles[].organization_resolved: false` and `unresolved_organization_ids`. The input's own
 `organizations[]` (LinkedIn affiliations, not employers) is moved to `affiliations`.
 
+Malformed input is dead-lettered to `out/dead_letter.ndjson` (file, line, error, raw prefix) and
+counted, never indexed: invalid JSON, a missing `serialized_data` or integer `forager_id`, an envelope
+`id` that differs from `forager_id`, or `roles` the join can't read (not a list of objects, or a
+non-integer `organization_id`). Documents Elasticsearch rejects are dead-lettered the same way. Neither
+fails the run; it exits non-zero only when a phase fails or the index count differs from the accepted
+documents (`persons_read - failed_docs`), i.e. documents were lost or duplicated.
+
 Explicit mapping with `dynamic: false` (`pipeline/etl/index_admin.py`): every field stays in
 `_source`, only the fields below are indexed.
 
 | Fields | Mapping | Why |
 |---|---|---|
-| `forager_id`, `linkedin_id`, `roles.organization_id`, `organizations.forager_id` / `.linkedin_id`, `unresolved_organization_ids` | `long` | id lookups, joins back to the feeds |
-| `first_name`, `last_name`, `headline` | `text` | full-text search only |
+| `forager_id`, `linkedin_id`, `roles.organization_id`, `organizations.forager_id` / `.linkedin_id`, `unresolved_organization_ids` | `keyword` | id lookups and joins back to the feeds; ids are never range-queried, and `term` on `keyword` is the faster lookup |
+| `first_name`, `last_name` | `text` + `.keyword` | search, plus exact match, sorting and aggregations |
+| `headline` | `text` | full-text search only |
+| `date_updated`, `organizations.date_updated` | `date`, format `yyyy-MM-dd HH:mm:ss.SSS X`, `ignore_malformed` | "updated since" queries; the feed's own timestamp format, `Z` or an offset like `-0700` |
 | `country`, `city`, `industry`, `skills`, `organizations.domain` / `.industry` / `.country` | `keyword`, `ignore_above: 256` | filters and facets; 256 is the dynamic-mapping default |
 | `roles.role_title`, `organizations.name` | `text` + `.keyword` | search, plus the exact `term` queries of `bench/correctness.py` |
 | `linkedin_slug` | `keyword`, `doc_values: false` | exact lookup only, never sorted or aggregated |
@@ -104,9 +113,10 @@ figures above are one clean run.
 - `python3 scripts/verify_documents.py` rebuilds about 2,700 sampled documents from the raw files and
   compares them field by field with what is in Elasticsearch. Both scripts share no code with the
   pipeline.
-- `docker compose run --rm pipeline python -m pytest -q tests` runs 8 tests (transform, Redis store,
-  bulk retry and failure handling, end-to-end on a fixture). `--no-deps` with
-  `tests/test_transform.py tests/test_bulk.py` runs the ones that need no services.
+- `docker compose run --rm pipeline python -m pytest -q tests` runs 18 tests (envelope and role
+  validation, transform, Redis store, bulk retry and failure handling, end-to-end on a fixture).
+  `--no-deps` with `tests/test_reader.py tests/test_transform.py tests/test_bulk.py` runs the ones
+  that need no services.
 
 ## Known limitations
 

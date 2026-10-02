@@ -76,8 +76,11 @@ def _run(cfg: Config, started: float) -> bool:
 
     wall_clock_s = time.monotonic() - started
     counts = totals(org_blocks + person_blocks)
+    # Dead letters (malformed input lines, documents ES rejected) are reported, not fatal; the run
+    # fails only when the index does not hold exactly the accepted documents (lost or duplicated).
     expected = int(counts["persons_read"] - counts["failed_docs"])
-    ok = es_count == expected and counts["failed_docs"] == 0
+    dead_letters = int(counts["malformed"] + counts["failed_docs"])
+    ok = es_count == expected
     peak, peak_source = peak_memory_bytes()
     metrics = {
         "persons_per_s": round(counts["docs_indexed"] / wall_clock_s, 1),
@@ -87,6 +90,7 @@ def _run(cfg: Config, started: float) -> bool:
         "es_count": es_count,
         "expected_count": expected,
         "ok": ok,
+        "dead_letters": dead_letters,
         "peak_memory_bytes": peak,
         "peak_memory_source": peak_source,
         "counters": {k: round(v, 2) if k.endswith("_s") else int(v) for k, v in counts.items()},
@@ -94,5 +98,6 @@ def _run(cfg: Config, started: float) -> bool:
     }
     cfg.out_dir.mkdir(parents=True, exist_ok=True)
     (cfg.out_dir / "metrics.json").write_bytes(orjson.dumps(metrics, option=orjson.OPT_INDENT_2))
-    logger.log(logging.INFO if ok else logging.ERROR, "summary", extra=metrics)
+    level = logging.ERROR if not ok else logging.WARNING if dead_letters else logging.INFO
+    logger.log(level, "summary", extra=metrics)
     return ok

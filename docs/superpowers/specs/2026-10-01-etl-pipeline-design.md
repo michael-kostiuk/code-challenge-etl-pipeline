@@ -72,7 +72,7 @@ Workers open their own store/HTTP connections after the process start.
 
 ## 4. Document and mapping
 
-Document `_id`: auto-generated (append-only fast path); `forager_id` is indexed as `long` for lookups.
+Document `_id`: auto-generated (append-only fast path); `forager_id` is indexed as `keyword` for lookups.
 
 ```jsonc
 {
@@ -86,25 +86,29 @@ Document `_id`: auto-generated (append-only fast path); `forager_id` is indexed 
 
 Mapping: `dynamic: false` at root (all fields kept in `_source`, only mapped fields indexed; avoids
 mid-load mapping updates and field explosion). Keyword fields use `ignore_above: 256` (the dynamic
-default).
+default). Identifiers are `keyword`, not `long`: they are only ever matched exactly, never
+range-queried, and `term` lookups on `keyword` are faster.
 
 | Field | Mapping |
 |---|---|
-| `forager_id`, `linkedin_id` | `long` |
-| `first_name`, `last_name`, `headline` | `text` |
+| `forager_id`, `linkedin_id` | `keyword` |
+| `date_updated` | `date`, format `yyyy-MM-dd HH:mm:ss.SSS X\|\|strict_date_optional_time\|\|epoch_millis`, `ignore_malformed: true` |
+| `first_name`, `last_name` | `text` + `.keyword` |
+| `headline` | `text` |
 | `country`, `city`, `industry`, `skills` | `keyword` |
 | `linkedin_slug` | `keyword`, `doc_values: false` |
 | `roles` | `object` (not `nested`: test `term` queries on subfields must match) |
 | `roles.role_title` | `text` + `.keyword` |
-| `roles.organization_id` | `long` |
+| `roles.organization_id` | `keyword` |
 | `roles.organization_resolved` | `boolean` |
 | `roles.start_date`, `roles.end_date` | `date`, `ignore_malformed: true` |
 | `organizations` | `object` |
-| `organizations.forager_id`, `organizations.linkedin_id` | `long` |
+| `organizations.forager_id`, `organizations.linkedin_id` | `keyword` |
+| `organizations.date_updated` | as `date_updated` (some orgs carry an offset, e.g. `-0700`) |
 | `organizations.name` | `text` + `.keyword` |
 | `organizations.domain`, `.industry`, `.country` | `keyword` |
 | `organizations.technologies`, `.keywords` | unmapped (indexing them measured 8% slower, §6 #7) |
-| `unresolved_organization_ids` | `long` |
+| `unresolved_organization_ids` | `keyword` |
 | `affiliations` | `enabled: false` |
 | everything else | unmapped (in `_source` only) |
 
@@ -117,8 +121,10 @@ Index settings: during load `refresh_interval: -1`, `number_of_replicas: 0`,
 
 ## 5. Error handling and observability
 
-**Input:** malformed JSON, or missing `serialized_data` / `forager_id` → skip, count, append to
-`out/dead_letter.ndjson` (file, line number, error, truncated raw). Unresolved org id → data, not error:
+**Input:** malformed JSON, missing `serialized_data` / integer `forager_id`, envelope `id` ≠
+`forager_id`, or (persons) `roles` the join can't read — not a list of objects, or a non-integer
+`organization_id` → skip, count, append to `out/dead_letter.ndjson` (file, line number, error,
+truncated raw). Unresolved org id → data, not error:
 flagged and counted. Null `organization_id` → passed through, counted.
 
 **Org store:** unreachable at startup → fail fast. Mid-run failure → bounded retries with backoff, then
@@ -132,8 +138,9 @@ re-runs from scratch, and the `es_count == persons_read - failed_docs` check cat
 
 **Run:** `persons` index existing at start → deleted and recreated (logged). Worker non-zero exit →
 abort, exit 1. Final verify: ES `_count` == successfully parsed persons − documents permanently rejected by ES
-(malformed lines are never counted as persons); mismatch or any permanent
-failure → exit non-zero.
+(malformed lines are never counted as persons); a mismatch means documents were lost or duplicated →
+exit non-zero. Dead letters (malformed input, ES-rejected documents) are counted, reported in
+`metrics.json` and the `summary` log (level `warning`), and do not fail the run.
 
 **Observability:** JSON-lines logs to stdout (`ts`, `level`, `event`, fields; events `phase_start`,
 `phase_end`, `progress`, `retry`, `dead_letter`, `summary`). Progress every 5 s from the parent via
@@ -178,7 +185,7 @@ unchanged. Shipped defaults = best measured config, ES heap kept modest (~4 GB) 
 Follows `.claude/skills/principle-test-behavior-not-implementation`: call the code as users do, assert
 literal expected values; no call-assertions, no constant pins.
 
-**Unit tests (6):**
+**Unit tests:**
 
 1. `transform` with two roles at org 140717, lookup `{140717: b'{"forager_id":140717,"name":"Dell Technologies","technologies":["ASP.NET"]}'}`
    and input `organizations:[{"name":"KGI Club"}]` → output equals a handwritten dict: one org entry,
@@ -194,10 +201,17 @@ literal expected values; no call-assertions, no constant pins.
    400 reason; failure count `1`; server stored `{1, 3}`.
 6. Fake bulk server stores the documents but answers after the client timeout → `BulkFailed`; document 1
    was received exactly once (not resent).
+7. `parse_envelope` rejects invalid JSON, a missing `serialized_data`, a non-integer `forager_id`, and
+   an envelope `id` that differs from `forager_id`.
+8. `check_person` accepts absent, null and well-formed `roles`; rejects `roles` that is not a list, a
+   null role, and a string or boolean `organization_id`.
 
 **End-to-end:** fixture (`pipeline/tests/fixtures/`, ~20 persons, ~10 orgs, one malformed line)
 through the real pipeline against compose ES + Redis; literal expectations hand-derived from the
-fixture (count, both `.keyword` term counts, unresolved-person count, dead-letter lines = 1).
+fixture (count, both `.keyword` term counts, unresolved-person count, `first_name.keyword` and
+`date_updated` queries incl. an offset org date, no `_ignored` fields; dead letters: one invalid JSON
+line, a null role, a string `organization_id`, an envelope id mismatch and one ES-rejected document,
+with the run still exiting 0).
 
 **Full-data:** `scripts/verify_index.py` asserts against the independent profiler's numbers
 (1,000,000 · 7,081 · 647 · 3,638 unresolved refs · 1,858 persons with unresolved refs · 17,302 with

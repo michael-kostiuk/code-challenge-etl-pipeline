@@ -5,6 +5,8 @@ from typing import Iterator, Mapping, NamedTuple
 
 import orjson
 
+from etl.reader import MalformedRecord
+
 
 class Document(NamedTuple):
     body: bytes            # the JSON document
@@ -12,8 +14,25 @@ class Document(NamedTuple):
     has_affiliations: bool
 
 
+def check_person(person: dict) -> None:
+    """Raises MalformedRecord unless `roles` is absent or a list of objects whose `organization_id`
+    is an integer or null: the shape the join below relies on."""
+    roles = person.get("roles")
+    if roles is None:
+        return
+    if not isinstance(roles, list):
+        raise MalformedRecord("roles is not a list")
+    for i, role in enumerate(roles):
+        if not isinstance(role, dict):
+            raise MalformedRecord(f"roles[{i}] is not an object")
+        org_id = role.get("organization_id")
+        if org_id is not None and (not isinstance(org_id, int) or isinstance(org_id, bool)):
+            raise MalformedRecord(f"roles[{i}].organization_id is not an integer")
+
+
 def _org_refs(person: dict) -> Iterator[tuple[dict, int]]:
-    """(role, organization_id) for every role that references an organization."""
+    """(role, organization_id) for every role that references an organization; `person` has passed
+    `check_person`."""
     for role in person.get("roles") or ():
         if (org_id := role.get("organization_id")) is not None:
             yield role, org_id

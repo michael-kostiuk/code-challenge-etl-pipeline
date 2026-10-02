@@ -1,6 +1,8 @@
 import orjson
+import pytest
 
-from etl.transform import build_document
+from etl.reader import MalformedRecord
+from etl.transform import build_document, check_person
 
 DELL = b'{"forager_id":140717,"name":"Dell Technologies","technologies":["ASP.NET"]}'
 
@@ -55,3 +57,20 @@ def test_keeps_and_flags_roles_whose_organization_is_unknown_or_missing():
         "unresolved_organization_ids": [999],
     }
     assert (doc.unresolved_refs, doc.has_affiliations) == (1, False)
+
+
+def test_accepts_persons_whose_roles_are_absent_or_well_formed():
+    check_person({"forager_id": 1})
+    check_person({"forager_id": 1, "roles": None})
+    check_person({"forager_id": 1, "roles": [{"organization_id": 140717}, {"organization_id": None}, {}]})
+
+
+@pytest.mark.parametrize("roles, error", [
+    ("Engineer", "roles is not a list"),
+    ([None], r"roles\[0\] is not an object"),
+    ([{"organization_id": 1}, {"organization_id": "140717"}], r"roles\[1\].organization_id is not an integer"),
+    ([{"organization_id": True}], r"roles\[0\].organization_id is not an integer"),
+])
+def test_rejects_persons_whose_roles_cannot_be_joined(roles, error):
+    with pytest.raises(MalformedRecord, match=error):
+        check_person({"forager_id": 1, "roles": roles})

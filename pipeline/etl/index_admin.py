@@ -5,9 +5,12 @@ from elasticsearch import Elasticsearch
 
 from etl.config import Config
 
+_ID = {"type": "keyword"}  # identifiers: exact lookups and joins, never ranges, so keyword over long
 _KEYWORD = {"type": "keyword", "ignore_above": 256}  # same limit as ES dynamic mapping
 _TEXT_WITH_KEYWORD = {"type": "text", "fields": {"keyword": _KEYWORD}}
 _DATE = {"type": "date", "ignore_malformed": True}  # one bad date must not reject the person
+# Feed timestamps: "2026-03-29 02:32:15.459 Z", and some orgs carry an offset ("... -0700").
+_UPDATED = {**_DATE, "format": "yyyy-MM-dd HH:mm:ss.SSS X||strict_date_optional_time||epoch_millis"}
 
 
 # `dynamic: false`: every field stays in _source, only the fields below are indexed.
@@ -17,10 +20,11 @@ _DATE = {"type": "date", "ignore_malformed": True}  # one bad date must not reje
 MAPPINGS = {
     "dynamic": False,
     "properties": {
-        "forager_id": {"type": "long"},
-        "linkedin_id": {"type": "long"},
-        "first_name": {"type": "text"},
-        "last_name": {"type": "text"},
+        "forager_id": _ID,
+        "linkedin_id": _ID,
+        "date_updated": _UPDATED,
+        "first_name": _TEXT_WITH_KEYWORD,
+        "last_name": _TEXT_WITH_KEYWORD,
         "headline": {"type": "text"},
         "country": _KEYWORD,
         "city": _KEYWORD,
@@ -30,7 +34,7 @@ MAPPINGS = {
         "roles": {
             "properties": {
                 "role_title": _TEXT_WITH_KEYWORD,
-                "organization_id": {"type": "long"},
+                "organization_id": _ID,
                 "organization_resolved": {"type": "boolean"},
                 "start_date": _DATE,
                 "end_date": _DATE,
@@ -38,15 +42,16 @@ MAPPINGS = {
         },
         "organizations": {
             "properties": {
-                "forager_id": {"type": "long"},
-                "linkedin_id": {"type": "long"},
+                "forager_id": _ID,
+                "linkedin_id": _ID,
+                "date_updated": _UPDATED,
                 "name": _TEXT_WITH_KEYWORD,
                 "domain": _KEYWORD,
                 "industry": _KEYWORD,
                 "country": _KEYWORD,
             }
         },
-        "unresolved_organization_ids": {"type": "long"},
+        "unresolved_organization_ids": _ID,
         "affiliations": {"type": "object", "enabled": False},
     },
 }

@@ -17,8 +17,8 @@ docker compose run --rm pipeline           # re-run the pipeline against running
 docker compose down -v                     # wipe the es-data volume for a fresh run
 python3 bench/correctness.py               # gate tests (stdlib only; ES_URL defaults to localhost:9200)
 bench/perf.sh                              # throughput report from out/metrics.json
-docker compose run --rm pipeline python -m pytest -q tests   # all 8 tests (unit + e2e; needs ES/Redis)
-docker compose run --rm --no-deps pipeline python -m pytest -q tests/test_transform.py tests/test_bulk.py  # unit only
+docker compose run --rm pipeline python -m pytest -q tests   # all 18 tests (unit + e2e; needs ES/Redis)
+docker compose run --rm --no-deps pipeline python -m pytest -q tests/test_reader.py tests/test_transform.py tests/test_bulk.py  # unit only
 python3 scripts/verify_index.py            # full-data counts vs the independent profiler (scripts/profile_data.py)
 python3 scripts/verify_documents.py        # independent full-document sample check against the raw data
 python3 scripts/bench.py LABEL -e KEY=VAL  # one benchmark config; --table to compare

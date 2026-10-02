@@ -100,38 +100,46 @@ What you verified, with counts:
   raw files and compares them with the indexed documents: 2,759 matched, 0 mismatched, 0 missing,
   0 duplicated.
 - The profiler (`scripts/profile_data.py`) and the document check use code separate from the
-  pipeline. `pytest` (8 tests) passes.
+  pipeline. `pytest` (18 tests) passes.
 
 ## Trade-offs
 
 - **Join: denormalized, app-side, Redis as the org store.** Full org-feed records are embedded in
-  `organizations[]` at ingest. Orgs (1.3 GB uncompressed, 99.4% referenced) do not fit in a 2 GiB
-  process as Python objects. Redis was about 4x faster than LMDB and SQLite (6,142 vs 1,620 and 1,350
-  persons/s, measured on an earlier 16 vCPU / 20 GB VM), and those two also exceeded the 2 GiB memory limit through page cache. Alternatives are
-  kept in `scripts/reference/`.
-- **No in-process org cache.** Org references are long-tailed (416K of 526K orgs referenced once), so a
-  500 MB LRU (125 MB per worker) serves only 29% of lookups and still leaves one MGET per batch.
-  Measured (3 interleaved runs each): 22.3K vs 26.5K persons/s without it, with pipeline peak memory
-  up 0.3 GiB. Lookups are already prefetched while the previous batch transforms, and ES is the
-  ceiling, so saved Redis time cannot become throughput.
-- **Explicit mapping, `dynamic: false`, instead of per-field `index: false`** (field table in
-  [README.md](README.md#schema)). Every field stays in `_source`; only fields worth querying are
-  indexed. An unmapped field is neither indexed nor given doc values, the same effect as
-  `index: false` + `doc_values: false` without listing every field, and the large org records cause
-  no mid-load mapping updates. Org `technologies` / `keywords` stay unindexed: indexing them measured
-  8% slower (earlier VM).
-- **`object`, not `nested`, for `roles` / `organizations`.** Required by the test `term` queries;
-  cost: cross-role matches ("title X at org Y" can match different roles).
-- **Input `organizations[]` -> `affiliations`.** 17,302 persons already carry LinkedIn affiliations
-  there; moved, not overwritten, so `organizations[]` means "joined employers" only.
+  `organizations[]` at ingest time.
+  - Cost: network latency, one MGET round-trip per batch instead of an in-memory lookup.
+  - But orgs are 1.3 GB uncompressed and 99.4% of them are referenced, so they don't fit in a
+    2 GiB process as Python objects.
+- **No in-process org cache.** Every lookup goes to Redis.
+  - Org references are long-tailed (416K of 526K orgs referenced once), so a 500 MB LRU serves
+    only 29% of lookups, still needs one MGET per batch, and adds 0.3 GiB pipeline peak memory.
+  - ES is the bottleneck, so saving Redis time doesn't turn into throughput.
+- **Explicit mapping with `dynamic: false`.** Only fields worth querying are indexed; everything
+  else stays in `_source` but can't be queried without a mapping change and reindex.
+  - Org `technologies` / `keywords` stay unindexed: indexing them was 8% slower.
+  - Identifiers (`forager_id`, `linkedin_id`, `organization_id`, ...) are `keyword`, not `long`: they
+    are only matched exactly, and `term` on `keyword` is the faster lookup. `first_name` / `last_name`
+    get a `.keyword` for exact match, sorting and aggregations; person and org `date_updated` are
+    indexed as dates in the feed's own format (`Z` or an offset like `-0700`), 0 `_ignored` values on
+    the full data.
+  - Cost of that change, 3 interleaved full runs each against the previous mapping: median
+    22,275 vs 23,600 persons/s over the full run (-5.6%), but within this session's noise (previous
+    mapping 21,957–25,338, new 17,628–23,918; the machine was slower than for the headline runs).
+- **`object`, not `nested`, for `roles` / `organizations`.** Required by the `term` queries in the
+  tests. Cost: cross-role matches ("title X at org Y" can match two different roles).
+- **Input `organizations[]` → `affiliations`.** 17,302 persons already have LinkedIn affiliations
+  there. Moved, not overwritten, so `organizations[]` means "joined employers" only.
 - **Unresolved refs flagged, not dropped.** `roles[].organization_resolved` plus
-  `unresolved_organization_ids` (3,638 refs, 1,858 persons).
-- **Auto-generated `_id`.** Retries only clean rejections (whole-request 429/503, item-level
-  429/5xx, connection never established); ambiguous failures fail the run, and the final count check
-  catches duplicates. Measured against explicit ids: no throughput difference (10,972 vs 11,151
-  persons/s (median of 3 dedicated benchmark runs each on the earlier 16 vCPU / 20 GB VM, separate from the final run above)); auto ids kept by choice, with the exactly-once guard above.
-- **Tuning.** Defaults: 4 workers, 4 shards, 10 MB bulk, 2 in-flight per worker, ES heap 4g, index
-  buffer 10%, refresh disabled during load, async translog. Bulk size and concurrency on this machine
-  (configs interleaved, 3 re-runs each, 2 for 5 MB × 4, median): 1 in-flight 32.1K p/s (ES write threads left idle),
-  2 in-flight 36.7K, 3 in-flight 36.5K (no gain, requests only queue inside ES), 5 MB × 4 in-flight
-  31.8K. No 429s or indexing throttling in any run, so 2 is the lowest concurrency that keeps ES saturated.
+  `unresolved_organization_ids` (3,638 refs in 1,858 persons).
+- **Dead letters are reported, not fatal.** Malformed input (including an envelope `id` that differs
+  from `forager_id`, or `roles` the join can't read) and documents Elasticsearch rejects go to
+  `out/dead_letter.ndjson` and the counters, and the `summary` log is a warning. The run fails only when
+  the index count differs from the accepted documents, i.e. something was lost or duplicated. One bad
+  record shouldn't cost a 1M-document load; the dead-letter file is the replay list.
+- **Auto-generated `_id`.** Retries aren't idempotent, so a retried request could create
+  duplicates.
+  - Only clean rejections are retried (whole-request 429/503, item-level 429/5xx, connection never
+    established); ambiguous failures fail the run, and the final count check catches duplicates.
+- **Refresh disabled and async translog during load.** Faster indexing, but documents aren't
+  searchable until the final refresh and durability is weaker while loading.
+- **2 in-flight bulk requests per worker.** Lowest concurrency that keeps ES saturated: 1 leaves
+  ES write threads idle, 3 only queues requests inside ES.
