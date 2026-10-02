@@ -1,0 +1,13 @@
+{
+  "_note": "Placeholder counts. Replace with real counts produced when generating expected values from the data bundle, before sending to a candidate. The test script reads this file.",
+  "index_name": "persons",
+  "total_persons": 1000000,
+  "persons_with_role_title": {
+    "role_title": "Project Manager",
+    "count": 0
+  },
+  "persons_at_organization": {
+    "name": "Dell Technologies",
+    "count": 0
+  }
+}
